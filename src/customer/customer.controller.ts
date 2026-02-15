@@ -15,6 +15,8 @@ import { CreateCustomerSchema } from './dto/create-customer.dto';
 import { ResponseCustomerDto } from './dto/response-customer.dto';
 import { ZodValidationPipe } from './pipes/zod-validation.pipe';
 import { CustomerStatus } from './schemas/customer.schema';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import type { CurrentUserData } from '../auth/decorators/current-user.decorator';
 
 @Controller('customers')
 export class CustomerController {
@@ -48,6 +50,21 @@ export class CustomerController {
       success: true,
       data: customers,
       message: 'Customers retrieved successfully',
+    };
+  }
+
+  @Get('me')
+  @HttpCode(HttpStatus.OK)
+  async getCurrentUser(@CurrentUser() user: CurrentUserData): Promise<{
+    success: boolean;
+    data: ResponseCustomerDto;
+    message: string;
+  }> {
+    const customer = await this.customerService.findById(user._id);
+    return {
+      success: true,
+      data: customer,
+      message: 'Customer retrieved successfully',
     };
   }
 

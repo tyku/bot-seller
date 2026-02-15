@@ -102,4 +102,17 @@ export class CustomerRepository {
       .findByIdAndUpdate(id, { status }, { new: true })
       .exec();
   }
+
+  async update(
+    id: string,
+    updateData: Partial<Customer>,
+  ): Promise<CustomerDocument | null> {
+    return this.customerModel
+      .findByIdAndUpdate(id, updateData, { new: true })
+      .exec();
+  }
+
+  async findByTelegramId(telegramId: number): Promise<CustomerDocument | null> {
+    return this.customerModel.findOne({ telegramId }).exec();
+  }
 }

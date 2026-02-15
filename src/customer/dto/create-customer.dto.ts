@@ -9,13 +9,18 @@ export const CreateCustomerSchema = z.object({
   email: z
     .string()
     .email('Invalid email format')
-    .toLowerCase(),
+    .toLowerCase()
+    .optional(),
   
   phone: z
     .string()
     .regex(/^\+?[1-9]\d{1,14}$/, 'Invalid phone number format (E.164)')
     .min(10, 'Phone number must be at least 10 characters')
-    .max(15, 'Phone number must be at most 15 characters'),
+    .max(15, 'Phone number must be at most 15 characters')
+    .optional(),
+  
+  passwordHash: z.string().optional(),
+  telegramUsername: z.string().optional(),
 });
 
 export type CreateCustomerDto = z.infer<typeof CreateCustomerSchema>;

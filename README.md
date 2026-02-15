@@ -1,136 +1,394 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# Bot Seller - Платформа для создания продающих ботов
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+Полноценная система для управления клиентами и настройками ботов с аутентификацией на базе JWT (OpenID Connect pattern) и верификацией через email/Telegram.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+## 🎉 Frontend готов!
 
-## Description
+**Современный web-интерфейс с wizard flow** для создания и управления ботами.
 
-Bot Seller - A NestJS application for managing customers and sales through automated bots.
+📖 **Подробная документация:** [`FRONTEND_SUMMARY.md`](./FRONTEND_SUMMARY.md)
+🚀 **Быстрый старт:** [`frontend/QUICKSTART.md`](./frontend/QUICKSTART.md)
 
-## Features
+**Структура:**
+- ✅ Next.js 16 + TypeScript + Tailwind CSS
+- ✅ 5-шаговый wizard: Регистрация → Верификация → Настройки → Оплата → Дашборд
+- ✅ Возможность вернуться на любой шаг
+- ✅ Простой UI без сложных компонентов
+- ✅ Полная интеграция с backend API
 
-- **Customer Module**: Complete customer management with auto-incrementing IDs, unique constraints, and Zod validation
-- **MongoDB Integration**: Using Mongoose ODM with optimized indexes
-- **Repository Pattern**: Clean separation of concerns for better testability
-- **Validation**: Zod schema validation with detailed error messages
-- **HTTP Status Codes**: Proper status codes and error handling
+## 🚀 Возможности
 
-## Project setup
+### Backend (NestJS)
+- ✅ **Регистрация и аутентификация** с JWT токенами
+- ✅ **Двухфакторная верификация** через email или Telegram
+- ✅ **Защита API** на основе JWT guards
+- ✅ **Управление настройками ботов** (Telegram, VK)
+- ✅ **Система промптов** для AI-ботов
+- ✅ **Простой Telegram модуль** для верификации кодов (не мешает future webhooks)
+- ✅ **MongoDB** с транзакциями для надежности
+- ✅ **Валидация** с помощью Zod схем
+- ✅ **Безопасность**: bcrypt хеширование, JWT, ownership checks
+
+### Frontend (Next.js) ✨ НОВОЕ!
+- ✅ **Wizard flow** - пошаговый процесс настройки (5 шагов)
+- ✅ **Простой UI** - без сложных компонентов, понятный каждому
+- ✅ **Валидация форм** - в реальном времени с Zod
+- ✅ **Возврат на любой шаг** - можно редактировать настройки в любой момент
+- ✅ **Сохранение прогресса** - localStorage, не потеряете данные
+- ✅ **Выбор тарифа** - 3 плана с визуальным сравнением
+- ✅ **Дашборд** - статистика, управление ботом
+- ✅ **Адаптивный дизайн** - работает на всех устройствах
+
+## 📋 Требования
+
+- Node.js 18+
+- MongoDB 5.0+
+- npm или yarn
+
+## 🔧 Установка и запуск
+
+### Backend
+
+#### 1. Клонируйте репозиторий (если еще не сделали)
 
 ```bash
-$ npm install
+git clone <repository-url>
+cd bot-seller
 ```
 
-## Environment Variables
-
-Create a `.env` file based on `.env.example`:
+#### 2. Установите зависимости
 
 ```bash
+npm install
+```
+
+#### 3. Настройте переменные окружения
+
+Создайте файл `.env` на основе `.env.example`:
+
+```bash
+cp .env.example .env
+```
+
+Отредактируйте `.env`:
+
+```env
+# Database
 MONGODB_URI=mongodb://localhost:27017/bot-seller
+
+# JWT Configuration
+JWT_SECRET=your-super-secret-jwt-key-change-in-production
+
+# SMTP Configuration (для email верификации)
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=your-email@gmail.com
+SMTP_PASS=your-app-password
+SMTP_FROM=noreply@bot-seller.com
+
+# Application
 PORT=3000
+NODE_ENV=development
 ```
 
-## Compile and run the project
+**Важно:** Для Gmail нужно использовать App Password (не обычный пароль). 
+[Инструкция по созданию App Password](https://support.google.com/accounts/answer/185833)
+
+### 4. Запустите MongoDB
 
 ```bash
-# development
-$ npm run start
+# Используя Docker
+docker run -d -p 27017:27017 --name mongodb mongo:latest
 
-# watch mode
-$ npm run start:dev
-
-# production mode
-$ npm run start:prod
+# Или установите локально
+# https://www.mongodb.com/docs/manual/installation/
 ```
 
-## Modules
-
-### Customer Module
-
-Manages customer data with the following features:
-
-- Auto-incrementing numeric `customerId` (predictable and incremental)
-- Unique indexes on `customerId`, `email`, and `phone`
-- Zod schema validation
-- Status tracking: `created` | `verified`
-- Automatic timestamps
-
-**API Endpoints:**
-
-- `POST /customers` - Create a new customer
-- `GET /customers` - Get all customers
-- `GET /customers/:id` - Get customer by ID
-- `PATCH /customers/:id/status` - Update customer status
-
-For detailed API documentation, see [Customer Module README](./src/customer/README.md)
-
-## Run tests
+### 5. Соберите проект
 
 ```bash
-# unit tests
-$ npm run test
-
-# e2e tests
-$ npm run test:e2e
-
-# test coverage
-$ npm run test:cov
+npm run build
 ```
 
-## Deployment
+## 🏃 Запуск
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
-
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+### Development режим (с hot reload)
 
 ```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
+npm run start:dev
 ```
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+### Production режим
 
-## Resources
+```bash
+npm run start:prod
+```
 
-Check out a few resources that may come in handy when working with NestJS:
+Сервер запустится на `http://localhost:3000`
 
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
+### Frontend ✨
 
-## Support
+#### 1. Перейдите в директорию frontend
 
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
+```bash
+cd frontend
+```
 
-## Stay in touch
+#### 2. Установите зависимости
 
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
+```bash
+npm install
+# или
+yarn install
+```
 
-## License
+**Если npm install зависает**, см. решения в [`frontend/QUICKSTART.md`](./frontend/QUICKSTART.md)
 
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+#### 3. Создайте .env.local (уже создан)
+
+```env
+NEXT_PUBLIC_API_URL=http://localhost:3000
+```
+
+#### 4. Запустите dev server
+
+```bash
+npm run dev
+```
+
+Frontend запустится на `http://localhost:3000` (или 3001 если 3000 занят)
+
+**📖 Полная документация:** [`frontend/README.md`](./frontend/README.md)
+
+## 📚 Документация
+
+### API Документация
+
+Полная документация API доступна в файле [API_DOCUMENTATION.md](./API_DOCUMENTATION.md)
+
+Основные эндпоинты:
+
+**Публичные (без авторизации):**
+- `POST /auth/register` - Регистрация
+- `POST /auth/login` - Вход
+- `POST /auth/verify` - Подтверждение кода
+- `POST /auth/resend-code` - Повторная отправка кода
+- `GET /telegram/verification/:username` - Получить pending код для Telegram
+- `POST /telegram/link` - Привязать Telegram аккаунт
+
+**Защищенные (требуют JWT токен):**
+- `GET /customers/me` - Текущий пользователь
+- `GET /customer-settings` - Список настроек ботов
+- `POST /customer-settings` - Создать настройку бота
+- `PATCH /customer-settings/:id` - Обновить настройки
+- `DELETE /customer-settings/:id` - Удалить настройки
+
+### Telegram Bot
+
+Пример простого Telegram бота для верификации: [TELEGRAM_BOT_EXAMPLE.md](./TELEGRAM_BOT_EXAMPLE.md)
+
+## 🏗 Архитектура
+
+```
+src/
+├── auth/                    # Модуль аутентификации
+│   ├── strategies/         # Passport стратегии (JWT)
+│   ├── guards/             # Guards для защиты эндпоинтов
+│   ├── decorators/         # @Public, @CurrentUser
+│   └── dto/                # DTOs для регистрации, логина, верификации
+├── verification/           # Модуль верификации (email/telegram)
+├── telegram/               # Простой Telegram модуль для кодов
+├── customer/               # Модуль клиентов
+│   ├── schemas/           # MongoDB схемы
+│   ├── dto/               # Data Transfer Objects
+│   └── pipes/             # Zod validation pipe
+├── customer-settings/      # Модуль настроек ботов
+└── app.module.ts          # Главный модуль
+```
+
+### Технологии
+
+- **NestJS** - фреймворк
+- **MongoDB + Mongoose** - база данных
+- **Passport + JWT** - аутентификация
+- **Zod** - валидация
+- **bcryptjs** - хеширование паролей
+- **nodemailer** - отправка email
+
+## 🔐 Безопасность
+
+### JWT Токены
+- Срок действия: 24 часа
+- Алгоритм: HS256
+- Payload: `sub` (user id), `customerId`, `email`
+
+### Пароли
+- Минимум 8 символов
+- Должен содержать: заглавную букву, строчную букву, цифру
+- Хешируются с bcrypt (10 rounds)
+
+### Верификация
+- 6-значные коды
+- Срок действия: 15 минут
+- Отдельные коды для email и telegram
+
+### API Protection
+- Глобальный JWT guard на всех эндпоинтах
+- Декоратор `@Public()` для публичных эндпоинтов
+- Проверка ownership (пользователь может работать только со своими данными)
+
+## 🧪 Тестирование
+
+### Unit тесты
+```bash
+npm run test
+```
+
+### E2E тесты
+```bash
+npm run test:e2e
+```
+
+### Coverage
+```bash
+npm run test:cov
+```
+
+## 📝 Примеры использования
+
+### 1. Регистрация через Email
+
+```bash
+# 1. Регистрация
+curl -X POST http://localhost:3000/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Иван Иванов",
+    "email": "ivan@example.com",
+    "phone": "+79123456789",
+    "password": "SecurePass123",
+    "verificationMethod": "email"
+  }'
+
+# 2. Проверить email, получить код (например, 123456)
+
+# 3. Подтвердить
+curl -X POST http://localhost:3000/auth/verify \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "ivan@example.com",
+    "code": "123456",
+    "method": "email"
+  }'
+
+# Получите JWT токен в ответе
+```
+
+### 2. Создание настроек бота
+
+```bash
+# Используйте токен из предыдущего шага
+curl -X POST http://localhost:3000/customer-settings \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "customerId": "1",
+    "name": "Мой Telegram бот",
+    "token": "1234567890:ABCdef...",
+    "botType": "tg",
+    "prompts": [
+      {
+        "name": "greeting",
+        "body": "Привет! Как я могу помочь?",
+        "type": "context"
+      }
+    ]
+  }'
+```
+
+## 🔄 Development Flow
+
+1. **Разработка**: `npm run start:dev` (hot reload)
+2. **Линтинг**: `npm run lint`
+3. **Форматирование**: `npm run format`
+4. **Сборка**: `npm run build`
+5. **Продакшн**: `npm run start:prod`
+
+## 📦 Структура базы данных
+
+### Customer Collection
+```javascript
+{
+  _id: ObjectId,
+  customerId: Number,        // Auto-increment ID
+  name: String,
+  email: String,             // Unique
+  phone: String,             // Unique
+  passwordHash: String,
+  status: "created" | "verified",
+  emailVerified: Boolean,
+  telegramVerified: Boolean,
+  emailVerificationCode: String,
+  emailVerificationExpires: Date,
+  telegramVerificationCode: String,
+  telegramVerificationExpires: Date,
+  telegramId: Number,        // Unique, optional
+  telegramUsername: String,
+  createdAt: Date,
+  updatedAt: Date
+}
+```
+
+### CustomerSettings Collection
+```javascript
+{
+  _id: ObjectId,
+  customerId: String,        // Reference to Customer.customerId
+  name: String,
+  token: String,
+  botType: "tg" | "vk",
+  prompts: [
+    {
+      name: String,
+      body: String,
+      type: "context"
+    }
+  ],
+  createdAt: Date,
+  updatedAt: Date
+}
+```
+
+## 🚧 TODO / Roadmap
+
+- [ ] Refresh tokens
+- [ ] Rate limiting и throttling
+- [ ] Admin роли и RBAC
+- [ ] OAuth2 providers (Google, GitHub, VK)
+- [ ] Swagger/OpenAPI документация
+- [ ] Multi-tenant Telegram webhook server
+- [ ] Websocket поддержка для real-time уведомлений
+- [ ] Логирование (Winston/Pino)
+- [ ] Мониторинг (Prometheus)
+- [ ] Docker Compose для простого запуска
+- [ ] CI/CD pipeline
+
+## 🤝 Вклад в проект
+
+1. Fork репозиторий
+2. Создайте feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit изменения (`git commit -m 'Add amazing feature'`)
+4. Push в branch (`git push origin feature/amazing-feature`)
+5. Откройте Pull Request
+
+## 📄 Лицензия
+
+[MIT](LICENSE)
+
+## 📧 Контакты
+
+Если у вас есть вопросы или предложения, создайте Issue в репозитории.
+
+---
+
+**Happy Coding! 🚀**

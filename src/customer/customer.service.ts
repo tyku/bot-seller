@@ -13,20 +13,24 @@ export class CustomerService {
   constructor(private readonly customerRepository: CustomerRepository) {}
 
   async create(createCustomerDto: CreateCustomerDto): Promise<ResponseCustomerDto> {
-    // Check if email already exists
-    const existingEmail = await this.customerRepository.findByEmail(
-      createCustomerDto.email,
-    );
-    if (existingEmail) {
-      throw new ConflictException('Customer with this email already exists');
+    // Check if email already exists (only if email provided)
+    if (createCustomerDto.email) {
+      const existingEmail = await this.customerRepository.findByEmail(
+        createCustomerDto.email,
+      );
+      if (existingEmail) {
+        throw new ConflictException('Customer with this email already exists');
+      }
     }
 
-    // Check if phone already exists
-    const existingPhone = await this.customerRepository.findByPhone(
-      createCustomerDto.phone,
-    );
-    if (existingPhone) {
-      throw new ConflictException('Customer with this phone already exists');
+    // Check if phone already exists (only if phone provided)
+    if (createCustomerDto.phone) {
+      const existingPhone = await this.customerRepository.findByPhone(
+        createCustomerDto.phone,
+      );
+      if (existingPhone) {
+        throw new ConflictException('Customer with this phone already exists');
+      }
     }
 
     try {
@@ -60,6 +64,28 @@ export class CustomerService {
       throw new BadRequestException('Customer not found');
     }
     return this.mapToResponseDto(customer);
+  }
+
+  async findByEmail(email: string): Promise<CustomerDocument | null> {
+    if (!email) return null;
+    return this.customerRepository.findByEmail(email);
+  }
+
+  async findByPhone(phone: string): Promise<CustomerDocument | null> {
+    if (!phone) return null;
+    return this.customerRepository.findByPhone(phone);
+  }
+
+  async updateCustomer(id: string, updateData: any): Promise<CustomerDocument> {
+    const customer = await this.customerRepository.update(id, updateData);
+    if (!customer) {
+      throw new BadRequestException('Customer not found');
+    }
+    return customer;
+  }
+
+  async findByTelegramId(telegramId: number): Promise<CustomerDocument | null> {
+    return this.customerRepository.findByTelegramId(telegramId);
   }
 
   private mapToResponseDto(customer: CustomerDocument): ResponseCustomerDto {
