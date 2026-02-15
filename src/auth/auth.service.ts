@@ -8,6 +8,7 @@ import * as bcrypt from 'bcryptjs';
 import { JwtPayload } from './strategies/jwt.strategy';
 import { VerificationService } from '../verification/verification.service';
 import { CustomerStatus } from '../customer/schemas/customer.schema';
+import { VerificationType } from '../verification/schemas/verification.schema';
 
 @Injectable()
 export class AuthService {
@@ -16,6 +17,15 @@ export class AuthService {
     private jwtService: JwtService,
     private verificationService: VerificationService,
   ) {}
+
+  private mapVerificationMethodToType(method: 'email' | 'telegram' | 'sms'): VerificationType {
+    const mapping = {
+      email: VerificationType.EMAIL,
+      telegram: VerificationType.TELEGRAM,
+      sms: VerificationType.SMS,
+    };
+    return mapping[method];
+  }
 
   async register(registerDto: RegisterDto) {
     // Check if user already exists by email or phone
@@ -45,35 +55,22 @@ export class AuthService {
       telegramUsername: registerDto.telegramUsername,
     });
 
-    // Generate and send verification code
-    const identifier = registerDto.email || registerDto.phone || '';
+    // Generate and send verification code using new verification service
+    const verificationType = this.mapVerificationMethodToType(registerDto.verificationMethod);
     
-    if (registerDto.verificationMethod === 'email') {
-      if (!registerDto.email) {
-        throw new BadRequestException('Email is required for email verification');
-      }
-      await this.verificationService.sendEmailVerification(registerDto.email, customer.id);
-    } else if (registerDto.verificationMethod === 'sms') {
-      if (!registerDto.phone) {
-        throw new BadRequestException('Phone is required for SMS verification');
-      }
-      // TODO: Implement SMS verification
-      throw new BadRequestException('SMS verification is not implemented yet');
-    } else if (registerDto.verificationMethod === 'telegram') {
-      if (!registerDto.telegramUsername) {
-        throw new BadRequestException('Telegram username is required for telegram verification');
-      }
-      if (!identifier) {
-        throw new BadRequestException('Email or phone is required for telegram verification');
-      }
-      await this.verificationService.sendTelegramVerification(identifier, registerDto.telegramUsername);
-    }
+    const verification = await this.verificationService.sendVerification(customer.id, {
+      email: registerDto.email,
+      phone: registerDto.phone,
+      telegramUsername: registerDto.telegramUsername,
+      type: verificationType,
+    });
 
     return {
       customerId: customer.customerId,
       email: customer.email,
       phone: customer.phone,
       verificationMethod: registerDto.verificationMethod,
+      verificationId: verification.id,
       message: `Verification code sent via ${registerDto.verificationMethod}`,
     };
   }
@@ -107,9 +104,9 @@ export class AuthService {
 
   async verifyCode(verifyCodeDto: VerifyCodeDto) {
     let customer;
-    const identifier = verifyCodeDto.email || verifyCodeDto.phone;
+    const contact = verifyCodeDto.email || verifyCodeDto.phone;
 
-    if (!identifier) {
+    if (!contact) {
       throw new BadRequestException('Email or phone must be provided');
     }
 
@@ -124,36 +121,22 @@ export class AuthService {
       throw new BadRequestException('Customer not found');
     }
 
-    const isValid = await this.verificationService.verifyCode(
-      identifier,
+    // Verify code using new verification service
+    const verificationType = this.mapVerificationMethodToType(verifyCodeDto.method);
+    const result = await this.verificationService.verifyCode(
+      contact,
       verifyCodeDto.code,
-      verifyCodeDto.method,
+      verificationType,
     );
 
-    if (!isValid) {
+    if (!result.verified) {
       throw new BadRequestException('Invalid or expired verification code');
     }
 
-    // Update customer verification status
-    const updateData: any = {
+    // Update customer status to verified
+    await this.customerService.updateCustomer(customer._id.toString(), {
       status: CustomerStatus.VERIFIED,
-    };
-
-    if (verifyCodeDto.method === 'email') {
-      updateData.emailVerified = true;
-      updateData.emailVerificationCode = null;
-      updateData.emailVerificationExpires = null;
-    } else if (verifyCodeDto.method === 'sms') {
-      updateData.phoneVerified = true;
-      updateData.phoneVerificationCode = null;
-      updateData.phoneVerificationExpires = null;
-    } else if (verifyCodeDto.method === 'telegram') {
-      updateData.telegramVerified = true;
-      updateData.telegramVerificationCode = null;
-      updateData.telegramVerificationExpires = null;
-    }
-
-    await this.customerService.updateCustomer(customer._id.toString(), updateData);
+    });
 
     // Generate and return JWT token
     return this.generateToken(customer);
@@ -175,26 +158,18 @@ export class AuthService {
     }
 
     const customerId = customer._id.toString();
+    const verificationType = this.mapVerificationMethodToType(method);
 
-    if (method === 'email') {
-      if (!customer.email) {
-        throw new BadRequestException('Email not set for this customer');
-      }
-      await this.verificationService.sendEmailVerification(customer.email, customerId);
-    } else if (method === 'sms') {
-      if (!customer.phone) {
-        throw new BadRequestException('Phone not set for this customer');
-      }
-      // TODO: Implement SMS verification
-      throw new BadRequestException('SMS verification is not implemented yet');
-    } else if (method === 'telegram') {
-      if (!customer.telegramUsername) {
-        throw new BadRequestException('Telegram username not set');
-      }
-      await this.verificationService.sendTelegramVerification(identifier, customer.telegramUsername);
-    }
+    // Send verification using new service
+    const verification = await this.verificationService.sendVerification(customerId, {
+      email: customer.email,
+      phone: customer.phone,
+      telegramUsername: customer.telegramUsername,
+      type: verificationType,
+    });
 
     return {
+      verificationId: verification.id,
       message: `Verification code resent via ${method}`,
     };
   }

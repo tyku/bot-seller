@@ -8,11 +8,6 @@ export enum CustomerStatus {
   VERIFIED = 'verified',
 }
 
-export enum VerificationMethod {
-  EMAIL = 'email',
-  TELEGRAM = 'telegram',
-}
-
 @Schema({ timestamps: true })
 export class Customer {
   @Prop({ required: true })
@@ -33,25 +28,7 @@ export class Customer {
   @Prop({ required: true, enum: CustomerStatus, default: CustomerStatus.CREATED })
   status: CustomerStatus;
 
-  // Verification fields
-  @Prop({ default: false })
-  emailVerified: boolean;
-
-  @Prop({ default: false })
-  telegramVerified: boolean;
-
-  @Prop()
-  emailVerificationCode: string;
-
-  @Prop()
-  emailVerificationExpires: Date;
-
-  @Prop()
-  telegramVerificationCode: string;
-
-  @Prop()
-  telegramVerificationExpires: Date;
-
+  // Telegram связь
   @Prop({ unique: true, sparse: true, index: true })
   telegramId: number;
 
