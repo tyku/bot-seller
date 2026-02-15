@@ -8,6 +8,7 @@ import {
   HttpCode,
   HttpStatus,
   UsePipes,
+  Logger,
 } from '@nestjs/common';
 import { CustomerService } from './customer.service';
 import type { CreateCustomerDto } from './dto/create-customer.dto';
@@ -20,6 +21,8 @@ import type { CurrentUserData } from '../auth/decorators/current-user.decorator'
 
 @Controller('customers')
 export class CustomerController {
+  private readonly logger = new Logger(CustomerController.name);
+
   constructor(private readonly customerService: CustomerService) {}
 
   @Post()
@@ -30,7 +33,9 @@ export class CustomerController {
     data: ResponseCustomerDto;
     message: string;
   }> {
+    this.logger.log('POST /customers - Create customer request received');
     const customer = await this.customerService.create(createCustomerDto);
+    this.logger.log('POST /customers - Customer created successfully');
     return {
       success: true,
       data: customer,
@@ -45,7 +50,9 @@ export class CustomerController {
     data: ResponseCustomerDto[];
     message: string;
   }> {
+    this.logger.log('GET /customers - Find all customers request received');
     const customers = await this.customerService.findAll();
+    this.logger.log('GET /customers - Customers retrieved successfully');
     return {
       success: true,
       data: customers,
@@ -60,7 +67,9 @@ export class CustomerController {
     data: ResponseCustomerDto;
     message: string;
   }> {
+    this.logger.log('GET /customers/me - Get current user request received');
     const customer = await this.customerService.findById(user._id);
+    this.logger.log('GET /customers/me - Current user retrieved successfully');
     return {
       success: true,
       data: customer,
@@ -93,7 +102,9 @@ export class CustomerController {
     data: ResponseCustomerDto;
     message: string;
   }> {
+    this.logger.log(`PATCH /customers/${id}/status - Update status request received`);
     const customer = await this.customerService.updateStatus(id, status);
+    this.logger.log(`PATCH /customers/${id}/status - Status updated successfully`);
     return {
       success: true,
       data: customer,

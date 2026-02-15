@@ -11,6 +11,7 @@ import {
   UsePipes,
   Query,
   ForbiddenException,
+  Logger,
 } from '@nestjs/common';
 import { CustomerSettingsService } from './customer-settings.service';
 import type { CreateCustomerSettingsDto } from './dto/create-customer-settings.dto';
@@ -22,6 +23,8 @@ import type { CurrentUserData } from '../auth/decorators/current-user.decorator'
 
 @Controller('customer-settings')
 export class CustomerSettingsController {
+  private readonly logger = new Logger(CustomerSettingsController.name);
+
   constructor(
     private readonly customerSettingsService: CustomerSettingsService,
   ) {}
@@ -37,14 +40,18 @@ export class CustomerSettingsController {
     data: ResponseCustomerSettingsDto;
     message: string;
   }> {
+    this.logger.log('POST /customer-settings - Create settings request received');
+    
     // Ensure user can only create settings for themselves
     if (createCustomerSettingsDto.customerId !== user.customerId.toString()) {
+      this.logger.warn(`Forbidden: User ${user.customerId} tried to create settings for ${createCustomerSettingsDto.customerId}`);
       throw new ForbiddenException('You can only create settings for your own account');
     }
 
     const customerSettings = await this.customerSettingsService.create(
       createCustomerSettingsDto,
     );
+    this.logger.log('POST /customer-settings - Settings created successfully');
     return {
       success: true,
       data: customerSettings,
@@ -62,14 +69,18 @@ export class CustomerSettingsController {
     data: ResponseCustomerSettingsDto[];
     message: string;
   }> {
+    this.logger.log('GET /customer-settings - Find all settings request received');
+    
     // Users can only view their own settings
     const targetCustomerId = customerId || user.customerId.toString();
     
     if (targetCustomerId !== user.customerId.toString()) {
+      this.logger.warn(`Forbidden: User ${user.customerId} tried to view settings for ${targetCustomerId}`);
       throw new ForbiddenException('You can only view your own settings');
     }
 
     const customerSettings = await this.customerSettingsService.findByCustomerId(targetCustomerId);
+    this.logger.log('GET /customer-settings - Settings retrieved successfully');
     return {
       success: true,
       data: customerSettings,
@@ -112,9 +123,12 @@ export class CustomerSettingsController {
     data: ResponseCustomerSettingsDto;
     message: string;
   }> {
+    this.logger.log(`PATCH /customer-settings/${id} - Update settings request received`);
+    
     // Check ownership before update
     const existing = await this.customerSettingsService.findById(id);
     if (existing.customerId !== user.customerId.toString()) {
+      this.logger.warn(`Forbidden: User ${user.customerId} tried to update settings ${id} owned by ${existing.customerId}`);
       throw new ForbiddenException('You can only update your own settings');
     }
 
@@ -122,6 +136,7 @@ export class CustomerSettingsController {
       id,
       updateData,
     );
+    this.logger.log(`PATCH /customer-settings/${id} - Settings updated successfully`);
     return {
       success: true,
       data: customerSettings,
@@ -138,13 +153,17 @@ export class CustomerSettingsController {
     success: boolean;
     message: string;
   }> {
+    this.logger.log(`DELETE /customer-settings/${id} - Delete settings request received`);
+    
     // Check ownership before delete
     const existing = await this.customerSettingsService.findById(id);
     if (existing.customerId !== user.customerId.toString()) {
+      this.logger.warn(`Forbidden: User ${user.customerId} tried to delete settings ${id} owned by ${existing.customerId}`);
       throw new ForbiddenException('You can only delete your own settings');
     }
 
     await this.customerSettingsService.delete(id);
+    this.logger.log(`DELETE /customer-settings/${id} - Settings deleted successfully`);
     return {
       success: true,
       message: 'Customer settings deleted successfully',

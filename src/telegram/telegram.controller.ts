@@ -13,14 +13,14 @@ export class TelegramController {
   constructor(private readonly telegramService: TelegramService) {}
 
   /**
-   * Get pending verification code for a telegram username
+   * Get pending verification code for a phone number
    * This can be polled by frontend or a simple bot
    */
   @Public()
-  @Get('verification/:username')
+  @Get('verification/:phone')
   @HttpCode(HttpStatus.OK)
-  async getPendingVerification(@Param('username') username: string) {
-    const verification = await this.telegramService.getPendingVerification(username);
+  async getPendingVerification(@Param('phone') phone: string) {
+    const verification = await this.telegramService.getPendingVerification(phone);
     
     if (!verification) {
       return {
@@ -44,12 +44,12 @@ export class TelegramController {
   @HttpCode(HttpStatus.OK)
   async linkAccount(@Body() body: {
     telegramId: number;
-    telegramUsername: string;
+    phone: string;
     code: string;
   }) {
     const success = await this.telegramService.linkTelegramAccount(
       body.telegramId,
-      body.telegramUsername,
+      body.phone,
       body.code,
     );
 

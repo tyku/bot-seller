@@ -28,3 +28,19 @@ export interface WizardState {
   user: User | null;
   settings: BotSettings | null;
 }
+
+// Verification types
+export type VerificationType = 'email' | 'telegram' | 'sms';
+export type VerificationStatus = 'pending' | 'verified' | 'expired' | 'failed';
+
+export interface Verification {
+  id: string;
+  customerId: string;
+  type: VerificationType;
+  status: VerificationStatus;
+  contact: string;
+  expiresAt: string;
+  verifiedAt?: string;
+  attempts: number;
+  createdAt: string;
+}

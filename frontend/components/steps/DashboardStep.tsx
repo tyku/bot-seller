@@ -5,6 +5,7 @@ import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { useWizard } from '@/contexts/WizardContext';
 import { settingsApi } from '@/lib/api';
+import { getErrorMessage } from '@/lib/error-utils';
 
 export function DashboardStep() {
   const { user, settings: wizardSettings, setStep } = useWizard();
@@ -24,7 +25,8 @@ export function DashboardStep() {
             setSettings(response.data[0]);
           }
         } catch (err) {
-          console.error('Failed to fetch settings', err);
+          const errorMessage = getErrorMessage(err, 'Не удалось загрузить настройки');
+          console.error('Failed to fetch settings:', errorMessage, err);
         }
       }
     };

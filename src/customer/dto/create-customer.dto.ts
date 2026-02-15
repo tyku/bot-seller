@@ -18,9 +18,6 @@ export const CreateCustomerSchema = z.object({
     .min(10, 'Phone number must be at least 10 characters')
     .max(15, 'Phone number must be at most 15 characters')
     .optional(),
-  
-  passwordHash: z.string().optional(),
-  telegramUsername: z.string().optional(),
 });
 
 export type CreateCustomerDto = z.infer<typeof CreateCustomerSchema>;

@@ -19,8 +19,13 @@ export function VerifyStep() {
   const [isResending, setIsResending] = useState(false);
   const [resendSuccess, setResendSuccess] = useState(false);
 
+  // Получаем данные из localStorage
   const email = typeof window !== 'undefined' ? localStorage.getItem('registrationEmail') || '' : '';
+  const phone = typeof window !== 'undefined' ? localStorage.getItem('registrationPhone') || '' : '';
   const method = typeof window !== 'undefined' ? (localStorage.getItem('verificationMethod') as 'email' | 'telegram') || 'email' : 'email';
+
+  // Контакт для отображения и отправки
+  const contact = email || phone;
 
   const {
     register,
@@ -34,14 +39,16 @@ export function VerifyStep() {
 
     try {
       await authApi.verify({
-        email,
+        email: email || undefined,
+        phone: phone || undefined,
         code: data.code,
+        method,
       });
 
       completeStep('verify');
       setStep('settings');
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Неверный код');
+      setError(err.response?.data?.message || err.message || 'Неверный код');
     } finally {
       setIsLoading(false);
     }
@@ -52,7 +59,7 @@ export function VerifyStep() {
     setResendSuccess(false);
 
     try {
-      await authApi.resendCode(email, method);
+      await authApi.resendCode(contact, method);
       setResendSuccess(true);
       setTimeout(() => setResendSuccess(false), 3000);
     } catch (err) {
@@ -71,7 +78,7 @@ export function VerifyStep() {
           <p className="text-gray-600">
             Мы отправили код на {method === 'email' ? 'email' : 'Telegram'}
           </p>
-          <p className="text-sm text-gray-500 mt-1">{email}</p>
+          <p className="text-sm text-gray-500 mt-1 break-all">{contact}</p>
         </div>
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
@@ -79,6 +86,7 @@ export function VerifyStep() {
             label="Код верификации"
             placeholder="123456"
             error={errors.code?.message}
+            helpText={method === 'telegram' ? 'Код придет в Telegram на ваш номер' : 'Проверьте папку Спам, если код не пришел'}
             {...register('code', {
               required: 'Введите код',
               minLength: { value: 4, message: 'Минимум 4 символа' },
@@ -112,6 +120,14 @@ export function VerifyStep() {
             </button>
           </div>
         </form>
+
+        <div className="mt-6 p-4 bg-blue-50 rounded-lg">
+          <p className="text-sm text-blue-800">
+            💡 <strong>Совет:</strong> {method === 'email' 
+              ? 'Проверьте папку "Спам", если не видите письмо в основной папке.' 
+              : 'Убедитесь, что у вас установлен Telegram и вы вошли в аккаунт.'}
+          </p>
+        </div>
       </Card>
     </div>
   );

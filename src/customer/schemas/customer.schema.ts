@@ -22,18 +22,12 @@ export class Customer {
   @Prop({ unique: true, sparse: true, index: true })
   phone: string;
 
-  @Prop({ required: true })
-  passwordHash: string;
-
   @Prop({ required: true, enum: CustomerStatus, default: CustomerStatus.CREATED })
   status: CustomerStatus;
 
-  // Telegram связь
+  // Telegram связь (опциональная)
   @Prop({ unique: true, sparse: true, index: true })
   telegramId: number;
-
-  @Prop()
-  telegramUsername: string;
 
   @Prop()
   createdAt: Date;

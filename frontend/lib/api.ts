@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:9022';
 
 export const api = axios.create({
   baseURL: API_URL,
@@ -18,38 +18,83 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+// Handle response errors
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    console.error('API Error:', error);
+    
+    // Extract error message from response
+    if (error.response?.data) {
+      const errorData = error.response.data;
+      const message = errorData.message || 'An error occurred';
+      const statusCode = errorData.statusCode || error.response.status;
+      
+      console.error(`[${statusCode}] ${message}`, errorData);
+      
+      // Create a user-friendly error
+      const enhancedError = new Error(message);
+      (enhancedError as any).statusCode = statusCode;
+      (enhancedError as any).errors = errorData.errors;
+      (enhancedError as any).originalError = error;
+      
+      return Promise.reject(enhancedError);
+    }
+    
+    // Network or other errors
+    if (error.request) {
+      console.error('Network Error: No response received', error.request);
+      return Promise.reject(new Error('Network error. Please check your connection.'));
+    }
+    
+    console.error('Error:', error.message);
+    return Promise.reject(error);
+  }
+);
+
 // Auth API
 export const authApi = {
-  register: async (data: {
+  // Регистрация через Email
+  registerEmail: async (data: {
     name: string;
     email: string;
-    phone: string;
-    password: string;
-    verificationMethod: 'email' | 'telegram';
-    telegramUsername?: string;
   }) => {
-    const response = await api.post('/auth/register', data);
+    const response = await api.post('/auth/register/email', data);
     return response.data;
   },
 
-  login: async (data: { email: string; password: string }) => {
+  // Регистрация через Telegram (phone)
+  registerTelegram: async (data: {
+    name: string;
+    phone: string;
+  }) => {
+    const response = await api.post('/auth/register/telegram', data);
+    return response.data;
+  },
+
+  // Login - теперь только отправляет код (без пароля)
+  login: async (data: { email?: string; phone?: string }) => {
     const response = await api.post('/auth/login', data);
-    if (response.data.data?.token) {
-      localStorage.setItem('token', response.data.data.token);
-    }
     return response.data;
   },
 
-  verify: async (data: { email: string; code: string }) => {
+  // Verify code
+  verify: async (data: { 
+    email?: string; 
+    phone?: string; 
+    code: string; 
+    method: 'email' | 'telegram';
+  }) => {
     const response = await api.post('/auth/verify', data);
-    if (response.data.data?.token) {
-      localStorage.setItem('token', response.data.data.token);
+    if (response.data.data?.accessToken) {
+      localStorage.setItem('token', response.data.data.accessToken);
     }
     return response.data;
   },
 
-  resendCode: async (email: string, method: 'email' | 'telegram') => {
-    const response = await api.post('/auth/resend-code', { email, method });
+  // Resend code
+  resendCode: async (identifier: string, method: 'email' | 'telegram') => {
+    const response = await api.post('/auth/resend-code', { identifier, method });
     return response.data;
   },
 };
@@ -93,6 +138,33 @@ export const settingsApi = {
 export const customerApi = {
   getMe: async () => {
     const response = await api.get('/customers/me');
+    return response.data;
+  },
+};
+
+// Verification API
+export const verificationApi = {
+  send: async (data: {
+    email?: string;
+    phone?: string;
+    type: 'email' | 'telegram' | 'sms';
+  }) => {
+    const response = await api.post('/verifications/send', data);
+    return response.data;
+  },
+
+  verify: async (data: {
+    email?: string;
+    phone?: string;
+    code: string;
+    type: 'email' | 'telegram' | 'sms';
+  }) => {
+    const response = await api.post('/verifications/verify', data);
+    return response.data;
+  },
+
+  getMyVerifications: async () => {
+    const response = await api.get('/verifications/my');
     return response.data;
   },
 };

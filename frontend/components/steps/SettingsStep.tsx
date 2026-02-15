@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { settingsApi, customerApi } from '@/lib/api';
 import { useWizard } from '@/contexts/WizardContext';
+import { getErrorMessage } from '@/lib/error-utils';
 
 const promptSchema = z.object({
   name: z.string().min(1, 'Введите название'),
@@ -58,7 +59,9 @@ export function SettingsStep() {
           const response = await customerApi.getMe();
           setUser(response.data);
         } catch (err) {
-          console.error('Failed to fetch user', err);
+          const errorMessage = getErrorMessage(err, 'Не удалось загрузить данные пользователя');
+          console.error('Failed to fetch user:', err);
+          setError(errorMessage);
         }
       }
     };
@@ -83,8 +86,10 @@ export function SettingsStep() {
       setSettings(response.data);
       completeStep('settings');
       setStep('payment');
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'Ошибка сохранения настроек');
+    } catch (err) {
+      const errorMessage = getErrorMessage(err, 'Ошибка сохранения настроек');
+      console.error('Settings save error:', err);
+      setError(errorMessage);
     } finally {
       setIsLoading(false);
     }
