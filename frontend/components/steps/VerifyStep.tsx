@@ -23,9 +23,13 @@ export function VerifyStep() {
   const email = typeof window !== 'undefined' ? localStorage.getItem('registrationEmail') || '' : '';
   const phone = typeof window !== 'undefined' ? localStorage.getItem('registrationPhone') || '' : '';
   const method = typeof window !== 'undefined' ? (localStorage.getItem('verificationMethod') as 'email' | 'telegram') || 'email' : 'email';
+  const botUsername = typeof window !== 'undefined' ? localStorage.getItem('telegramBotUsername') || 'bot' : 'bot';
 
   // Контакт для отображения и отправки
   const contact = email || phone;
+  
+  // Telegram bot link
+  const telegramBotLink = `https://t.me/${botUsername}`;
 
   const {
     register,
@@ -109,6 +113,24 @@ export function VerifyStep() {
             Подтвердить
           </Button>
 
+          {method === 'telegram' && (
+            <a
+              href={telegramBotLink}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="block w-full"
+            >
+              <Button
+                type="button"
+                variant="secondary"
+                className="w-full"
+              >
+                <span className="mr-2">📱</span>
+                Перейти в бота за кодом
+              </Button>
+            </a>
+          )}
+
           <div className="text-center">
             <button
               type="button"
@@ -125,7 +147,7 @@ export function VerifyStep() {
           <p className="text-sm text-blue-800">
             💡 <strong>Совет:</strong> {method === 'email' 
               ? 'Проверьте папку "Спам", если не видите письмо в основной папке.' 
-              : 'Убедитесь, что у вас установлен Telegram и вы вошли в аккаунт.'}
+              : `Код придет в Telegram бота @${botUsername}. Нажмите кнопку выше для перехода в бота.`}
           </p>
         </div>
       </Card>

@@ -1,5 +1,6 @@
 import { Injectable, UnauthorizedException, ConflictException, BadRequestException, Logger } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config';
 import { CustomerService } from '../customer/customer.service';
 import { RegisterEmailDto, RegisterTelegramDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
@@ -8,6 +9,7 @@ import { JwtPayload } from './strategies/jwt.strategy';
 import { VerificationService } from '../verification/verification.service';
 import { CustomerStatus } from '../customer/schemas/customer.schema';
 import { VerificationType } from '../verification/schemas/verification.schema';
+import { TelegramService } from '../telegram/telegram.service';
 
 @Injectable()
 export class AuthService {
@@ -17,31 +19,29 @@ export class AuthService {
     private customerService: CustomerService,
     private jwtService: JwtService,
     private verificationService: VerificationService,
+    private configService: ConfigService,
+    private telegramService: TelegramService,
   ) {}
 
   /**
-   * Регистрация через Email
+   * Регистрация через Email (только email, без имени)
    */
   async registerEmail(registerDto: RegisterEmailDto) {
     this.logger.log(`Email registration attempt for: ${registerDto.email}`);
     
     try {
-      // Check if email already exists
       const existingByEmail = await this.customerService.findByEmail(registerDto.email);
       if (existingByEmail) {
         this.logger.warn(`Registration failed: Email ${registerDto.email} already exists`);
         throw new ConflictException('User with this email already exists');
       }
 
-      // Create customer (without password)
       this.logger.log('Creating new customer...');
       const customer = await this.customerService.create({
-        name: registerDto.name,
         email: registerDto.email,
       });
       this.logger.log(`Customer created successfully: ${customer.customerId}`);
 
-      // Send verification code via email
       this.logger.log(`Sending verification code via email`);
       const verification = await this.verificationService.sendVerification(customer.id, {
         email: registerDto.email,
@@ -63,28 +63,25 @@ export class AuthService {
   }
 
   /**
-   * Регистрация через Telegram (phone)
+   * Регистрация через Telegram (только phone)
+   * Создает customer, отправляет код, возвращает ссылку на бота
    */
   async registerTelegram(registerDto: RegisterTelegramDto) {
     this.logger.log(`Telegram registration attempt for phone: ${registerDto.phone}`);
     
     try {
-      // Check if phone already exists
       const existingByPhone = await this.customerService.findByPhone(registerDto.phone);
       if (existingByPhone) {
         this.logger.warn(`Registration failed: Phone ${registerDto.phone} already exists`);
         throw new ConflictException('User with this phone already exists');
       }
 
-      // Create customer (without password)
       this.logger.log('Creating new customer...');
       const customer = await this.customerService.create({
-        name: registerDto.name,
         phone: registerDto.phone,
       });
       this.logger.log(`Customer created successfully: ${customer.customerId}`);
 
-      // Send verification code via telegram
       this.logger.log(`Sending verification code via Telegram`);
       const verification = await this.verificationService.sendVerification(customer.id, {
         phone: registerDto.phone,
@@ -92,11 +89,15 @@ export class AuthService {
       });
       this.logger.log(`Verification code sent successfully. Verification ID: ${verification.id}`);
 
+      const botUsername = this.configService.get<string>('telegram.botUsername');
+
       return {
         customerId: customer.customerId,
         phone: customer.phone,
         verificationMethod: 'telegram',
         verificationId: verification.id,
+        botUsername,
+        telegramLink: `https://t.me/${botUsername}`,
         message: 'Verification code sent via Telegram',
       };
     } catch (error) {

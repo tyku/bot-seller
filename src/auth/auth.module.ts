@@ -7,6 +7,7 @@ import { AuthController } from './auth.controller';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { CustomerModule } from '../customer/customer.module';
 import { VerificationModule } from '../verification/verification.module';
+import { TelegramModule } from '../telegram/telegram.module';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { VerificationModule } from '../verification/verification.module';
     }),
     CustomerModule,
     VerificationModule,
+    TelegramModule,
   ],
   controllers: [AuthController],
   providers: [AuthService, JwtStrategy],

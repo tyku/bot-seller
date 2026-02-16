@@ -54,20 +54,14 @@ api.interceptors.response.use(
 
 // Auth API
 export const authApi = {
-  // Регистрация через Email
-  registerEmail: async (data: {
-    name: string;
-    email: string;
-  }) => {
+  // Регистрация через Email (только email)
+  registerEmail: async (data: { email: string }) => {
     const response = await api.post('/auth/register/email', data);
     return response.data;
   },
 
-  // Регистрация через Telegram (phone)
-  registerTelegram: async (data: {
-    name: string;
-    phone: string;
-  }) => {
+  // Регистрация через Telegram (только phone)
+  registerTelegram: async (data: { phone: string }) => {
     const response = await api.post('/auth/register/telegram', data);
     return response.data;
   },

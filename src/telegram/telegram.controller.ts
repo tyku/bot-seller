@@ -65,4 +65,31 @@ export class TelegramController {
       message: 'Telegram account linked successfully',
     };
   }
+
+  /**
+   * Webhook для получения контакта от Telegram бота
+   * Вызывается ботом когда пользователь делится контактом
+   */
+  @Public()
+  @Post('contact')
+  @HttpCode(HttpStatus.OK)
+  async receiveContact(@Body() body: {
+    sessionId: string;
+    phone: string;
+    telegramId: number;
+    telegramUsername?: string;
+  }) {
+    const session = await this.telegramService.updateSessionWithContact(
+      body.sessionId,
+      body.phone,
+      body.telegramId,
+      body.telegramUsername,
+    );
+
+    return {
+      success: true,
+      data: { status: session.status },
+      message: 'Contact received successfully',
+    };
+  }
 }

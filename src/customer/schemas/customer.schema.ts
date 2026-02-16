@@ -10,7 +10,7 @@ export enum CustomerStatus {
 
 @Schema({ timestamps: true })
 export class Customer {
-  @Prop({ required: true })
+  @Prop()
   name: string;
 
   @Prop({ required: true, unique: true, index: true })
