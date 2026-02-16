@@ -34,28 +34,14 @@ class EnvironmentVariables {
   @IsString()
   JWT_SECRET: string;
 
-  // SMTP
+  // Resend
   @IsString()
   @IsOptional()
-  SMTP_HOST?: string;
-
-  @IsNumber()
-  @Min(1)
-  @Max(65535)
-  @IsOptional()
-  SMTP_PORT?: number;
+  RESEND_API_KEY?: string;
 
   @IsString()
   @IsOptional()
-  SMTP_USER?: string;
-
-  @IsString()
-  @IsOptional()
-  SMTP_PASS?: string;
-
-  @IsString()
-  @IsOptional()
-  SMTP_FROM?: string;
+  RESEND_FROM?: string;
 
   // Telegram
   @IsString()

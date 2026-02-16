@@ -1,6 +1,6 @@
 import { Injectable, BadRequestException, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import * as nodemailer from 'nodemailer';
+import { Resend } from 'resend';
 import { TelegramService } from '../telegram/telegram.service';
 import { VerificationRepository } from './verification.repository';
 import { VerificationType, VerificationStatus } from './schemas/verification.schema';
@@ -10,7 +10,7 @@ import { ResponseVerificationDto } from './dto/response-verification.dto';
 @Injectable()
 export class VerificationService {
   private readonly logger = new Logger(VerificationService.name);
-  private transporter: nodemailer.Transporter;
+  private resend: Resend | null = null;
   private readonly VERIFICATION_EXPIRY_MINUTES = 15;
   private readonly MAX_ATTEMPTS = 5;
 
@@ -19,29 +19,13 @@ export class VerificationService {
     private readonly telegramService: TelegramService,
     private readonly configService: ConfigService,
   ) {
-    // Configure email transporter
-    try {
-      const smtpHost = this.configService.get<string>('smtp.host');
-      const smtpPort = this.configService.get<number>('smtp.port');
-      const smtpUser = this.configService.get<string>('smtp.user');
-      const smtpPass = this.configService.get<string>('smtp.pass');
-
-      if (smtpHost && smtpPort && smtpUser && smtpPass) {
-        this.transporter = nodemailer.createTransport({
-          host: smtpHost,
-          port: smtpPort,
-          secure: false,
-          auth: {
-            user: smtpUser,
-            pass: smtpPass,
-          },
-        });
-        this.logger.log('Email transporter configured successfully');
-      } else {
-        this.logger.warn('SMTP configuration incomplete - email verification will not work');
-      }
-    } catch (error) {
-      this.logger.error('Failed to configure email transporter', error.stack);
+    const apiKey = this.configService.get<string>('resend.apiKey');
+console.log("=============================", apiKey)
+    if (apiKey) {
+      this.resend = new Resend(apiKey);
+      this.logger.log('Resend email client configured successfully');
+    } else {
+      this.logger.warn('RESEND_API_KEY not set - email verification will not work');
     }
   }
 
@@ -104,16 +88,16 @@ export class VerificationService {
   }
 
   private async sendEmailCode(email: string, code: string): Promise<void> {
-    if (!this.transporter) {
-      this.logger.error('Email transporter not configured - cannot send email');
+    if (!this.resend) {
+      this.logger.error('Resend client not configured - cannot send email');
       throw new BadRequestException('Email verification is not configured. Please use another verification method.');
     }
 
     try {
       this.logger.log(`Attempting to send email to ${email}`);
-      await this.transporter.sendMail({
-        from: this.configService.get<string>('smtp.from'),
-        to: email,
+      const { data, error } = await this.resend.emails.send({
+        from: this.configService.get<string>('resend.from') || 'onboarding@resend.dev',
+        to: [email],
         subject: 'Verify your email address',
         html: `
           <h1>Email Verification</h1>
@@ -122,7 +106,13 @@ export class VerificationService {
           <p>If you didn't request this code, please ignore this email.</p>
         `,
       });
-      this.logger.log(`Email sent successfully to ${email}`);
+
+      if (error) {
+        this.logger.error(`Resend API error for ${email}: ${error.message}`);
+        throw new Error(error.message);
+      }
+
+      this.logger.log(`Email sent successfully to ${email}, id: ${data?.id}`);
     } catch (error) {
       this.logger.error(`Failed to send email to ${email}: ${error.message}`, error.stack);
       throw new BadRequestException('Failed to send verification email');
