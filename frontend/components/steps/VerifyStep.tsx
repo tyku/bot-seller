@@ -50,7 +50,7 @@ export function VerifyStep() {
       });
 
       completeStep('verify');
-      setStep('settings');
+      setStep('profile');
     } catch (err: any) {
       setError(err.response?.data?.message || err.message || 'Неверный код');
     } finally {

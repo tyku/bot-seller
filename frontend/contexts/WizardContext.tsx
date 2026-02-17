@@ -9,21 +9,23 @@ interface WizardContextType extends WizardState {
   setSettings: (settings: BotSettings | null) => void;
   completeStep: (step: WizardStep) => void;
   canAccessStep: (step: WizardStep) => boolean;
+  logout: () => void;
 }
 
 const WizardContext = createContext<WizardContextType | undefined>(undefined);
 
-const STEP_ORDER: WizardStep[] = ['register', 'verify', 'settings', 'payment', 'dashboard'];
+const STEP_ORDER: WizardStep[] = ['register', 'verify', 'profile'];
+
+const INITIAL_STATE: WizardState = {
+  currentStep: 'register',
+  completedSteps: [],
+  user: null,
+  settings: null,
+};
 
 export function WizardProvider({ children }: { children: React.ReactNode }) {
-  const [state, setState] = useState<WizardState>({
-    currentStep: 'register',
-    completedSteps: [],
-    user: null,
-    settings: null,
-  });
+  const [state, setState] = useState<WizardState>(INITIAL_STATE);
 
-  // Load state from localStorage on mount
   useEffect(() => {
     const saved = localStorage.getItem('wizardState');
     if (saved) {
@@ -36,7 +38,6 @@ export function WizardProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  // Save state to localStorage on change
   useEffect(() => {
     localStorage.setItem('wizardState', JSON.stringify(state));
   }, [state]);
@@ -65,15 +66,24 @@ export function WizardProvider({ children }: { children: React.ReactNode }) {
 
   const canAccessStep = (step: WizardStep): boolean => {
     const stepIndex = STEP_ORDER.indexOf(step);
-    if (stepIndex === 0) return true; // First step always accessible
+    if (stepIndex === 0) return true;
 
-    // Check if previous steps are completed
     for (let i = 0; i < stepIndex; i++) {
       if (!state.completedSteps.includes(STEP_ORDER[i])) {
         return false;
       }
     }
     return true;
+  };
+
+  const logout = () => {
+    localStorage.removeItem('wizardState');
+    localStorage.removeItem('token');
+    localStorage.removeItem('registrationEmail');
+    localStorage.removeItem('registrationPhone');
+    localStorage.removeItem('verificationMethod');
+    localStorage.removeItem('telegramBotUsername');
+    setState(INITIAL_STATE);
   };
 
   return (
@@ -85,6 +95,7 @@ export function WizardProvider({ children }: { children: React.ReactNode }) {
         setSettings,
         completeStep,
         canAccessStep,
+        logout,
       }}
     >
       {children}

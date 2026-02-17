@@ -7,9 +7,10 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   const configService = app.get(ConfigService);
   
-  // Enable CORS for frontend
+  // Enable CORS
+  const isDev = configService.get<string>('nodeEnv') !== 'production';
   app.enableCors({
-    origin: ['http://localhost:3000', 'http://localhost:3001'], // Frontend ports
+    origin: isDev ? true : ['http://localhost:3000'], // TODO: replace with production domain
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
     credentials: true,
     allowedHeaders: 'Content-Type,Authorization,Accept',
