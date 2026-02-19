@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -8,9 +8,9 @@ import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { settingsApi, customerApi } from '@/lib/api';
-import { useWizard } from '@/contexts/WizardContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { getErrorMessage } from '@/lib/error-utils';
-import { BotSettings } from '@/lib/types';
+import { BotSettings, BotStatusType } from '@/lib/types';
 
 const promptSchema = z.object({
   name: z.string().min(1, 'Введите название'),
@@ -27,11 +27,25 @@ const botSchema = z.object({
 
 type BotForm = z.infer<typeof botSchema>;
 
+const defaultFormValues: BotForm = {
+  name: '',
+  token: '',
+  botType: 'tg',
+  prompts: [{ name: 'greeting', body: 'Привет! Я ваш помощник.', type: 'context' }],
+};
+
+const statusConfig: Record<BotStatusType, { label: string; color: string; dot: string }> = {
+  created: { label: 'Создан', color: 'bg-gray-100 text-gray-700', dot: 'bg-gray-400' },
+  active: { label: 'Активен', color: 'bg-green-100 text-green-700', dot: 'bg-green-500' },
+  archived: { label: 'Архив', color: 'bg-yellow-100 text-yellow-700', dot: 'bg-yellow-500' },
+};
+
 export function BotsSection() {
-  const { user, setUser } = useWizard();
+  const { user, setUser } = useAuth();
   const [bots, setBots] = useState<BotSettings[]>([]);
   const [isLoadingBots, setIsLoadingBots] = useState(true);
-  const [showForm, setShowForm] = useState(false);
+  const [formMode, setFormMode] = useState<'closed' | 'create' | 'edit'>('closed');
+  const [editingBotId, setEditingBotId] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -44,10 +58,7 @@ export function BotsSection() {
     formState: { errors },
   } = useForm<BotForm>({
     resolver: zodResolver(botSchema),
-    defaultValues: {
-      botType: 'tg',
-      prompts: [{ name: 'greeting', body: 'Привет! Я ваш помощник.', type: 'context' }],
-    },
+    defaultValues: defaultFormValues,
   });
 
   const { fields, append, remove } = useFieldArray({
@@ -79,6 +90,36 @@ export function BotsSection() {
     init();
   }, [user, setUser]);
 
+  const openCreateForm = useCallback(() => {
+    reset(defaultFormValues);
+    setEditingBotId(null);
+    setError('');
+    setFormMode('create');
+  }, [reset]);
+
+  const openEditForm = useCallback((bot: BotSettings) => {
+    reset({
+      name: bot.name,
+      token: bot.token,
+      botType: bot.botType as 'tg' | 'vk',
+      prompts: bot.prompts.map((p) => ({
+        name: p.name,
+        body: p.body,
+        type: 'context' as const,
+      })),
+    });
+    setEditingBotId(bot.id ?? null);
+    setError('');
+    setFormMode('edit');
+  }, [reset]);
+
+  const closeForm = useCallback(() => {
+    setFormMode('closed');
+    setEditingBotId(null);
+    setError('');
+    reset(defaultFormValues);
+  }, [reset]);
+
   const onSubmit = async (data: BotForm) => {
     if (!user) {
       setError('Пользователь не найден');
@@ -89,15 +130,19 @@ export function BotsSection() {
     setError('');
 
     try {
-      const response = await settingsApi.create({
-        customerId: user.customerId.toString(),
-        ...data,
-      });
-      setBots((prev) => [...prev, response.data]);
-      setShowForm(false);
-      reset();
+      if (formMode === 'edit' && editingBotId) {
+        const response = await settingsApi.update(editingBotId, data);
+        setBots((prev) => prev.map((b) => (b.id === editingBotId ? response.data : b)));
+      } else {
+        const response = await settingsApi.create({
+          customerId: user.customerId.toString(),
+          ...data,
+        });
+        setBots((prev) => [...prev, response.data]);
+      }
+      closeForm();
     } catch (err) {
-      setError(getErrorMessage(err, 'Ошибка создания бота'));
+      setError(getErrorMessage(err, formMode === 'edit' ? 'Ошибка сохранения' : 'Ошибка создания бота'));
     } finally {
       setIsSubmitting(false);
     }
@@ -107,10 +152,22 @@ export function BotsSection() {
     try {
       await settingsApi.delete(id);
       setBots((prev) => prev.filter((b) => b.id !== id));
+      if (editingBotId === id) closeForm();
     } catch (err) {
       console.error('Failed to delete bot:', err);
     }
   };
+
+  const handleStatusChange = async (id: string, newStatus: BotStatusType) => {
+    try {
+      const response = await settingsApi.update(id, { status: newStatus });
+      setBots((prev) => prev.map((b) => (b.id === id ? response.data : b)));
+    } catch (err) {
+      console.error('Failed to update status:', err);
+    }
+  };
+
+  const isFormOpen = formMode !== 'closed';
 
   return (
     <div className="space-y-6">
@@ -119,17 +176,18 @@ export function BotsSection() {
           <h2 className="text-2xl font-bold text-gray-900">Мои боты</h2>
           <p className="text-gray-600 mt-1">Управляйте вашими ботами</p>
         </div>
-        {!showForm && (
-          <Button onClick={() => setShowForm(true)}>
+        {!isFormOpen && (
+          <Button onClick={openCreateForm}>
             + Добавить бота
           </Button>
         )}
       </div>
 
-      {/* Bot creation form */}
-      {showForm && (
+      {isFormOpen && (
         <Card>
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Новый бот</h3>
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">
+            {formMode === 'edit' ? 'Редактирование бота' : 'Новый бот'}
+          </h3>
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
             <Input
               label="Название бота"
@@ -174,6 +232,7 @@ export function BotsSection() {
               label={`Токен ${botType === 'tg' ? 'Telegram' : 'VK'}`}
               placeholder={botType === 'tg' ? '1234567890:ABCdefGHIjklMNOpqrsTUVwxyz' : 'vk1.a.xxx'}
               error={errors.token?.message}
+              sensitive
               helpText={
                 botType === 'tg'
                   ? 'Получите токен у @BotFather в Telegram'
@@ -239,74 +298,115 @@ export function BotsSection() {
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => {
-                  setShowForm(false);
-                  reset();
-                }}
+                onClick={closeForm}
                 className="flex-1"
               >
                 Отмена
               </Button>
               <Button type="submit" className="flex-1" isLoading={isSubmitting}>
-                Создать бота
+                {formMode === 'edit' ? 'Сохранить' : 'Создать бота'}
               </Button>
             </div>
           </form>
         </Card>
       )}
 
-      {/* Bots list */}
       {isLoadingBots ? (
         <Card>
           <div className="text-center py-8 text-gray-500">Загрузка ботов...</div>
         </Card>
-      ) : bots.length === 0 && !showForm ? (
+      ) : bots.length === 0 && !isFormOpen ? (
         <Card>
           <div className="text-center py-12">
             <div className="text-6xl mb-4">🤖</div>
             <h3 className="text-lg font-semibold text-gray-900 mb-2">Нет ботов</h3>
             <p className="text-gray-600 mb-6">Создайте вашего первого бота для начала работы</p>
-            <Button onClick={() => setShowForm(true)}>
+            <Button onClick={openCreateForm}>
               + Добавить бота
             </Button>
           </div>
         </Card>
       ) : (
         <div className="grid gap-4">
-          {bots.map((bot) => (
-            <Card key={bot.id} className="hover:shadow-md transition-shadow">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <div className={`w-12 h-12 rounded-lg flex items-center justify-center text-2xl ${
-                    bot.botType === 'tg' ? 'bg-blue-100' : 'bg-indigo-100'
-                  }`}>
-                    {bot.botType === 'tg' ? '📱' : '💬'}
+          {bots.map((bot) => {
+            const status = statusConfig[bot.status] || statusConfig.created;
+            return (
+              <Card key={bot.id} className="hover:shadow-md transition-shadow">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <div className={`w-12 h-12 rounded-lg flex items-center justify-center text-2xl ${
+                      bot.botType === 'tg' ? 'bg-blue-100' : 'bg-indigo-100'
+                    }`}>
+                      {bot.botType === 'tg' ? '📱' : '💬'}
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-gray-900">{bot.name}</h3>
+                      <p className="text-sm text-gray-500">
+                        {bot.botType === 'tg' ? 'Telegram' : 'VK'} &middot; {bot.prompts.length} промпт(ов)
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <h3 className="font-semibold text-gray-900">{bot.name}</h3>
-                    <p className="text-sm text-gray-500">
-                      {bot.botType === 'tg' ? 'Telegram' : 'VK'} &middot; {bot.prompts.length} промпт(ов)
-                    </p>
+                  <div className="flex items-center gap-3">
+                    <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium ${status.color}`}>
+                      <span className={`w-1.5 h-1.5 rounded-full ${status.dot} ${bot.status === 'active' ? 'animate-pulse' : ''}`}></span>
+                      {status.label}
+                    </span>
+                    {bot.id && bot.status === 'created' && (
+                      <button
+                        onClick={() => handleStatusChange(bot.id!, 'active')}
+                        className="text-gray-400 hover:text-green-500 transition-colors p-1"
+                        title="Активировать"
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 0 1 0 1.972l-11.54 6.347a1.125 1.125 0 0 1-1.667-.986V5.653Z" />
+                        </svg>
+                      </button>
+                    )}
+                    {bot.id && bot.status === 'active' && (
+                      <button
+                        onClick={() => handleStatusChange(bot.id!, 'archived')}
+                        className="text-gray-400 hover:text-yellow-500 transition-colors p-1"
+                        title="В архив"
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.25 7.5A2.25 2.25 0 0 1 7.5 5.25h9a2.25 2.25 0 0 1 2.25 2.25v9a2.25 2.25 0 0 1-2.25 2.25h-9a2.25 2.25 0 0 1-2.25-2.25v-9Z" />
+                        </svg>
+                      </button>
+                    )}
+                    {bot.id && bot.status === 'archived' && (
+                      <button
+                        onClick={() => handleStatusChange(bot.id!, 'active')}
+                        className="text-gray-400 hover:text-green-500 transition-colors p-1"
+                        title="Восстановить"
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182" />
+                        </svg>
+                      </button>
+                    )}
+                    <button
+                      onClick={() => openEditForm(bot)}
+                      className="text-gray-400 hover:text-blue-500 transition-colors p-1"
+                      title="Редактировать"
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" />
+                      </svg>
+                    </button>
+                    <button
+                      onClick={() => bot.id && handleDelete(bot.id)}
+                      className="text-gray-400 hover:text-red-500 transition-colors p-1"
+                      title="Удалить"
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </button>
                   </div>
                 </div>
-                <div className="flex items-center gap-3">
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700">
-                    <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></span>
-                    Активен
-                  </span>
-                  <button
-                    onClick={() => bot.id && handleDelete(bot.id)}
-                    className="text-gray-400 hover:text-red-500 transition-colors p-1"
-                    title="Удалить"
-                  >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                    </svg>
-                  </button>
-                </div>
-              </div>
-            </Card>
-          ))}
+              </Card>
+            );
+          })}
         </div>
       )}
     </div>

@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { ProfileTab } from '@/lib/types';
-import { useWizard } from '@/contexts/WizardContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { BotsSection } from './BotsSection';
 import { OrganizationSection } from './OrganizationSection';
 import { SubscriptionSection } from './SubscriptionSection';
@@ -14,7 +14,7 @@ const TABS: { id: ProfileTab; label: string; icon: string }[] = [
 ];
 
 export function ProfilePage() {
-  const { user, logout } = useWizard();
+  const { user, logout } = useAuth();
   const [activeTab, setActiveTab] = useState<ProfileTab>('bots');
 
   const renderContent = () => {

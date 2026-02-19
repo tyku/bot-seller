@@ -1,4 +1,4 @@
-import { BotType, PromptType } from '../schemas/customer-settings.schema';
+import { BotType, BotStatus, PromptType } from '../schemas/customer-settings.schema';
 
 export interface PromptDto {
   name: string;
@@ -12,6 +12,7 @@ export class ResponseCustomerSettingsDto {
   name: string;
   token: string;
   botType: BotType;
+  status: BotStatus;
   prompts: PromptDto[];
   createdAt: Date;
   updatedAt: Date;

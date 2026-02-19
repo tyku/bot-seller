@@ -8,14 +8,13 @@ import {
   Delete,
   HttpCode,
   HttpStatus,
-  UsePipes,
   Query,
   ForbiddenException,
   Logger,
 } from '@nestjs/common';
 import { CustomerSettingsService } from './customer-settings.service';
-import type { CreateCustomerSettingsDto } from './dto/create-customer-settings.dto';
-import { CreateCustomerSettingsSchema } from './dto/create-customer-settings.dto';
+import type { CreateCustomerSettingsDto, UpdateCustomerSettingsDto } from './dto/create-customer-settings.dto';
+import { CreateCustomerSettingsSchema, UpdateCustomerSettingsSchema } from './dto/create-customer-settings.dto';
 import { ResponseCustomerSettingsDto } from './dto/response-customer-settings.dto';
 import { ZodValidationPipe } from '../customer/pipes/zod-validation.pipe';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
@@ -31,10 +30,9 @@ export class CustomerSettingsController {
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
-  @UsePipes(new ZodValidationPipe(CreateCustomerSettingsSchema))
   async create(
     @CurrentUser() user: CurrentUserData,
-    @Body() createCustomerSettingsDto: CreateCustomerSettingsDto,
+    @Body(new ZodValidationPipe(CreateCustomerSettingsSchema)) createCustomerSettingsDto: CreateCustomerSettingsDto,
   ): Promise<{
     success: boolean;
     data: ResponseCustomerSettingsDto;
@@ -117,7 +115,7 @@ export class CustomerSettingsController {
   async update(
     @CurrentUser() user: CurrentUserData,
     @Param('id') id: string,
-    @Body() updateData: Partial<CreateCustomerSettingsDto>,
+    @Body(new ZodValidationPipe(UpdateCustomerSettingsSchema)) updateData: UpdateCustomerSettingsDto,
   ): Promise<{
     success: boolean;
     data: ResponseCustomerSettingsDto;

@@ -11,12 +11,15 @@ export interface User {
   status: 'created' | 'verified';
 }
 
+export type BotStatusType = 'created' | 'active' | 'archived';
+
 export interface BotSettings {
   id?: string;
   customerId: string;
   name: string;
   token: string;
   botType: 'tg' | 'vk';
+  status: BotStatusType;
   prompts: Array<{
     name: string;
     body: string;

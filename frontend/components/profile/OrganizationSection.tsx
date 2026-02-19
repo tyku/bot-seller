@@ -4,14 +4,15 @@ import React, { useState, useEffect } from 'react';
 import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
-import { useWizard } from '@/contexts/WizardContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { customerApi } from '@/lib/api';
 
 export function OrganizationSection() {
-  const { user, setUser } = useWizard();
+  const { user, setUser, logout } = useAuth();
   const [isEditing, setIsEditing] = useState(false);
   const [name, setName] = useState(user?.name || '');
   const [isSaving, setIsSaving] = useState(false);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     const fetchUser = async () => {
@@ -20,22 +21,31 @@ export function OrganizationSection() {
           const response = await customerApi.getMe();
           setUser(response.data);
           setName(response.data?.name || '');
-        } catch (err) {
-          console.error('Failed to fetch user:', err);
+        } catch (err: any) {
+          if (err.statusCode === 401) {
+            logout();
+          }
         }
       }
     };
     fetchUser();
-  }, [user, setUser]);
+  }, [user, setUser, logout]);
 
   const handleSave = async () => {
     setIsSaving(true);
+    setError('');
     try {
-      // stub - just update local state
-      if (user) {
-        setUser({ ...user, name });
+      const response = await customerApi.updateMe({ name });
+      if (response.data) {
+        setUser(response.data);
       }
       setIsEditing(false);
+    } catch (err: any) {
+      if (err.statusCode === 401) {
+        logout();
+        return;
+      }
+      setError(err.message || 'Не удалось сохранить');
     } finally {
       setIsSaving(false);
     }
@@ -52,24 +62,9 @@ export function OrganizationSection() {
         <h3 className="text-lg font-semibold text-gray-900 mb-6">Основные данные</h3>
 
         <div className="space-y-5">
-          <div className="grid grid-cols-2 gap-6">
-            <div>
-              <label className="block text-sm font-medium text-gray-500 mb-1">ID клиента</label>
-              <p className="text-gray-900 font-medium">{user?.customerId ?? '—'}</p>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-500 mb-1">Статус</label>
-              <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium ${
-                user?.status === 'verified'
-                  ? 'bg-green-100 text-green-700'
-                  : 'bg-yellow-100 text-yellow-700'
-              }`}>
-                <span className={`w-1.5 h-1.5 rounded-full ${
-                  user?.status === 'verified' ? 'bg-green-500' : 'bg-yellow-500'
-                }`}></span>
-                {user?.status === 'verified' ? 'Верифицирован' : 'Не верифицирован'}
-              </span>
-            </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-500 mb-1">ID клиента</label>
+            <p className="text-gray-900 font-medium">{user?.customerId ?? '—'}</p>
           </div>
 
           <div className="border-t pt-5">
@@ -81,11 +76,19 @@ export function OrganizationSection() {
                   onChange={(e) => setName(e.target.value)}
                   placeholder="ООО Моя Компания"
                 />
+
+                {error && (
+                  <div className="bg-red-50 border border-red-100 text-red-600 p-3 rounded-xl text-sm">
+                    {error}
+                  </div>
+                )}
+
                 <div className="flex gap-3">
                   <Button
                     variant="outline"
                     onClick={() => {
                       setIsEditing(false);
+                      setError('');
                       setName(user?.name || '');
                     }}
                   >

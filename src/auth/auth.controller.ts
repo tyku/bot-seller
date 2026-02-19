@@ -6,6 +6,8 @@ import type { LoginDto } from './dto/login.dto';
 import { LoginSchema } from './dto/login.dto';
 import type { VerifyCodeDto } from './dto/verify-code.dto';
 import { VerifyCodeSchema } from './dto/verify-code.dto';
+import type { EnterDto } from './dto/enter.dto';
+import { EnterSchema } from './dto/enter.dto';
 import { ZodValidationPipe } from '../customer/pipes/zod-validation.pipe';
 import { Public } from './decorators/public.decorator';
 
@@ -14,6 +16,21 @@ export class AuthController {
   private readonly logger = new Logger(AuthController.name);
 
   constructor(private readonly authService: AuthService) {}
+
+  @Public()
+  @Post('enter')
+  @HttpCode(HttpStatus.OK)
+  @UsePipes(new ZodValidationPipe(EnterSchema))
+  async enter(@Body() enterDto: EnterDto) {
+    this.logger.log('POST /auth/enter - Enter request received');
+    const result = await this.authService.enter(enterDto.contact);
+    this.logger.log('POST /auth/enter - Verification code sent');
+    return {
+      success: true,
+      data: result,
+      message: 'Verification code sent',
+    };
+  }
 
   @Public()
   @Post('register/email')

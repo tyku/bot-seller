@@ -27,10 +27,9 @@ export class VerificationController {
   @UseGuards(JwtAuthGuard)
   @Post('send')
   @HttpCode(HttpStatus.OK)
-  @UsePipes(new ZodValidationPipe(SendVerificationSchema))
   async sendVerification(
     @CurrentUser() user: CurrentUserData,
-    @Body() dto: SendVerificationDto,
+    @Body(new ZodValidationPipe(SendVerificationSchema)) dto: SendVerificationDto,
   ) {
     const verification = await this.verificationService.sendVerification(user._id, dto);
     return {

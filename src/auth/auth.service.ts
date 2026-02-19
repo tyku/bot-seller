@@ -5,6 +5,7 @@ import { CustomerService } from '../customer/customer.service';
 import { RegisterEmailDto, RegisterTelegramDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { VerifyCodeDto } from './dto/verify-code.dto';
+import { detectContactType } from './dto/enter.dto';
 import { JwtPayload } from './strategies/jwt.strategy';
 import { VerificationService } from '../verification/verification.service';
 import { CustomerStatus } from '../customer/schemas/customer.schema';
@@ -22,6 +23,56 @@ export class AuthService {
     private configService: ConfigService,
     private telegramService: TelegramService,
   ) {}
+
+  /**
+   * Unified enter: find or create user, send verification code.
+   * Works for both new and existing users.
+   */
+  async enter(contact: string) {
+    this.logger.log(`Enter attempt for contact: ${contact}`);
+
+    try {
+      const contactType = detectContactType(contact);
+      const isEmail = contactType === 'email';
+
+      const existing = isEmail
+        ? await this.customerService.findByEmail(contact)
+        : await this.customerService.findByPhone(contact);
+
+      let customerId: string;
+      if (existing) {
+        customerId = existing._id.toString();
+      } else {
+        this.logger.log(`Customer not found, creating new one`);
+        const created = await this.customerService.create(
+          isEmail ? { email: contact } : { phone: contact },
+        );
+        customerId = created.id;
+        this.logger.log(`Customer created: ${created.customerId}`);
+      }
+
+      const verificationType = isEmail ? VerificationType.EMAIL : VerificationType.TELEGRAM;
+      const contactInfo = isEmail ? { email: contact } : { phone: contact };
+
+      const verification = await this.verificationService.sendVerification(
+        customerId,
+        { ...contactInfo, type: verificationType },
+      );
+
+      this.logger.log(`Verification code sent`);
+
+      const botUsername = this.configService.get<string>('telegram.botUsername');
+
+      return {
+        verificationId: verification.id,
+        method: isEmail ? 'email' : 'telegram',
+        ...(isEmail ? {} : { botUsername, telegramLink: `https://t.me/${botUsername}?start=auth` }),
+      };
+    } catch (error) {
+      this.logger.error(`Enter error: ${error.message}`, error.stack);
+      throw error;
+    }
+  }
 
   /**
    * Регистрация через Email (только email, без имени)
@@ -97,7 +148,7 @@ export class AuthService {
         verificationMethod: 'telegram',
         verificationId: verification.id,
         botUsername,
-        telegramLink: `https://t.me/${botUsername}`,
+        telegramLink: `https://t.me/${botUsername}?start=auth`,
         message: 'Verification code sent via Telegram',
       };
     } catch (error) {

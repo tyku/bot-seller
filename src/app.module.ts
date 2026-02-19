@@ -7,6 +7,7 @@ import { CustomerSettingsModule } from './customer-settings/customer-settings.mo
 import { AuthModule } from './auth/auth.module';
 import { VerificationModule } from './verification/verification.module';
 import { TelegramModule } from './telegram/telegram.module';
+import { UserModule } from './user/user.module';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import configuration from './config/configuration';
 import { validate } from './config/env.validation';
@@ -30,6 +31,7 @@ import { validate } from './config/env.validation';
     AuthModule,
     VerificationModule,
     TelegramModule,
+    UserModule,
   ],
   controllers: [],
   providers: [

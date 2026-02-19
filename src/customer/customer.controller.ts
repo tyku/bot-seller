@@ -77,6 +77,37 @@ export class CustomerController {
     };
   }
 
+  @Patch('me')
+  @HttpCode(HttpStatus.OK)
+  async updateCurrentUser(
+    @CurrentUser() user: CurrentUserData,
+    @Body() updateData: { name?: string },
+  ): Promise<{
+    success: boolean;
+    data: ResponseCustomerDto;
+    message: string;
+  }> {
+    this.logger.log('PATCH /customers/me - Update current user request received');
+    const customer = await this.customerService.updateCustomer(user._id, {
+      name: updateData.name,
+    });
+    this.logger.log('PATCH /customers/me - Current user updated successfully');
+    return {
+      success: true,
+      data: new ResponseCustomerDto({
+        id: customer._id.toString(),
+        customerId: customer.customerId,
+        name: customer.name,
+        email: customer.email,
+        phone: customer.phone,
+        status: customer.status,
+        createdAt: customer.createdAt,
+        updatedAt: customer.updatedAt,
+      }),
+      message: 'Customer updated successfully',
+    };
+  }
+
   @Get(':id')
   @HttpCode(HttpStatus.OK)
   async findOne(@Param('id') id: string): Promise<{

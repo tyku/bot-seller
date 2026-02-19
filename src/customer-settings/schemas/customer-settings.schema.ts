@@ -8,6 +8,12 @@ export enum BotType {
   VK = 'vk',
 }
 
+export enum BotStatus {
+  CREATED = 'created',
+  ACTIVE = 'active',
+  ARCHIVED = 'archived',
+}
+
 export enum PromptType {
   CONTEXT = 'context',
 }
@@ -39,6 +45,9 @@ export class CustomerSettings {
 
   @Prop({ required: true, enum: BotType })
   botType: BotType;
+
+  @Prop({ required: true, enum: BotStatus, default: BotStatus.CREATED })
+  status: BotStatus;
 
   @Prop({ type: [PromptSchema], default: [] })
   prompts: Prompt[];

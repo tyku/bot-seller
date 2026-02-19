@@ -5,7 +5,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { CustomerSettingsRepository } from './customer-settings.repository';
-import { CreateCustomerSettingsDto } from './dto/create-customer-settings.dto';
+import { CreateCustomerSettingsDto, UpdateCustomerSettingsDto } from './dto/create-customer-settings.dto';
 import { ResponseCustomerSettingsDto } from './dto/response-customer-settings.dto';
 import { CustomerSettingsDocument } from './schemas/customer-settings.schema';
 
@@ -85,7 +85,7 @@ export class CustomerSettingsService {
 
   async update(
     id: string,
-    updateData: Partial<CreateCustomerSettingsDto>,
+    updateData: UpdateCustomerSettingsDto,
   ): Promise<ResponseCustomerSettingsDto> {
     this.logger.log(`Updating customer settings: ${id}`);
     try {
@@ -135,6 +135,7 @@ export class CustomerSettingsService {
       name: customerSettings.name,
       token: customerSettings.token,
       botType: customerSettings.botType,
+      status: customerSettings.status,
       prompts: customerSettings.prompts.map((prompt) => ({
         name: prompt.name,
         body: prompt.body,
