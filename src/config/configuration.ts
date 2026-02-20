@@ -6,6 +6,11 @@ export default () => ({
     uri: process.env.MONGODB_URI || 'mongodb://localhost:27017/bot-seller',
   },
   
+  redis: {
+    host: process.env.REDIS_HOST || 'localhost',
+    port: parseInt(process.env.REDIS_PORT || '6379', 10),
+  },
+  
   jwt: {
     secret: process.env.JWT_SECRET || 'your-secret-key-change-in-production',
     expiresIn: '24h',

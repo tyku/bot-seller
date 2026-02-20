@@ -43,6 +43,17 @@ class EnvironmentVariables {
   @IsOptional()
   RESEND_FROM?: string;
 
+  // Redis
+  @IsString()
+  @IsOptional()
+  REDIS_HOST?: string;
+
+  @IsNumber()
+  @Min(1)
+  @Max(65535)
+  @IsOptional()
+  REDIS_PORT?: number;
+
   // Telegram
   @IsString()
   @IsOptional()

@@ -49,6 +49,9 @@ export class CustomerSettings {
   @Prop({ required: true, enum: BotStatus, default: BotStatus.CREATED })
   status: BotStatus;
 
+  @Prop()
+  webhookSecret?: string;
+
   @Prop({ type: [PromptSchema], default: [] })
   prompts: Prompt[];
 
