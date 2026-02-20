@@ -54,6 +54,16 @@ class EnvironmentVariables {
   @IsOptional()
   REDIS_PORT?: number;
 
+  // Encryption
+  @IsString()
+  @IsOptional()
+  ENCRYPTION_KEY?: string;
+
+  // Gateway
+  @IsString()
+  @IsOptional()
+  GATEWAY_BASE_URL?: string;
+
   // Telegram
   @IsString()
   @IsOptional()

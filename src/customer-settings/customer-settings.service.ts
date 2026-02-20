@@ -7,7 +7,14 @@ import {
 import { CustomerSettingsRepository } from './customer-settings.repository';
 import { CreateCustomerSettingsDto, UpdateCustomerSettingsDto } from './dto/create-customer-settings.dto';
 import { ResponseCustomerSettingsDto } from './dto/response-customer-settings.dto';
-import { CustomerSettingsDocument } from './schemas/customer-settings.schema';
+import {
+  CustomerSettingsDocument,
+  BotStatus,
+  BotType,
+} from './schemas/customer-settings.schema';
+import { WebhookSecretService } from './services/webhook-secret.service';
+import { BotCacheService } from './services/bot-cache.service';
+import { TelegramWebhookService } from './services/telegram-webhook.service';
 
 @Injectable()
 export class CustomerSettingsService {
@@ -15,17 +22,29 @@ export class CustomerSettingsService {
 
   constructor(
     private readonly customerSettingsRepository: CustomerSettingsRepository,
+    private readonly webhookSecretService: WebhookSecretService,
+    private readonly botCacheService: BotCacheService,
+    private readonly telegramWebhookService: TelegramWebhookService,
   ) {}
 
   async create(
     createCustomerSettingsDto: CreateCustomerSettingsDto,
   ): Promise<ResponseCustomerSettingsDto> {
     this.logger.log(`Creating customer settings for customer: ${createCustomerSettingsDto.customerId}`);
-    
+
     try {
-      const customerSettings = await this.customerSettingsRepository.create(
-        createCustomerSettingsDto,
-      );
+      let webhookSecret: string | undefined;
+
+      if (createCustomerSettingsDto.botType === BotType.TG) {
+        const plainSecret = this.webhookSecretService.generate();
+        webhookSecret = this.webhookSecretService.encrypt(plainSecret);
+      }
+
+      const customerSettings = await this.customerSettingsRepository.create({
+        ...createCustomerSettingsDto,
+        webhookSecret,
+      });
+
       this.logger.log(`Customer settings created successfully: ${customerSettings._id}`);
       return this.mapToResponseDto(customerSettings);
     } catch (error) {
@@ -88,19 +107,46 @@ export class CustomerSettingsService {
     updateData: UpdateCustomerSettingsDto,
   ): Promise<ResponseCustomerSettingsDto> {
     this.logger.log(`Updating customer settings: ${id}`);
+
+    const current = await this.customerSettingsRepository.findById(id);
+    if (!current) {
+      throw new NotFoundException('Customer settings not found');
+    }
+
+    if (updateData.token && updateData.token !== current.token && current.status === BotStatus.ACTIVE) {
+      throw new BadRequestException('Deactivate bot before changing token');
+    }
+
+    const isActivating =
+      updateData.status === BotStatus.ACTIVE && current.status !== BotStatus.ACTIVE;
+    const isDeactivating =
+      updateData.status !== undefined &&
+      updateData.status !== BotStatus.ACTIVE &&
+      current.status === BotStatus.ACTIVE;
+
+    if (isActivating && current.botType === BotType.TG) {
+      await this.activateTelegramBot(id, current);
+    }
+
     try {
-      const customerSettings = await this.customerSettingsRepository.update(
-        id,
-        updateData,
-      );
-      if (!customerSettings) {
-        this.logger.warn(`Customer settings not found for update: ${id}`);
+      const updated = await this.customerSettingsRepository.update(id, updateData);
+      if (!updated) {
         throw new NotFoundException('Customer settings not found');
       }
+
+      if (isDeactivating && current.botType === BotType.TG) {
+        await this.deactivateTelegramBot(id, current);
+      }
+
       this.logger.log(`Customer settings updated successfully: ${id}`);
-      return this.mapToResponseDto(customerSettings);
+      return this.mapToResponseDto(updated);
     } catch (error) {
-      if (error instanceof NotFoundException) {
+      if (isActivating && current.botType === BotType.TG) {
+        await this.deactivateTelegramBot(id, current).catch((e) =>
+          this.logger.error(`Cleanup after failed update: ${e.message}`),
+        );
+      }
+      if (error instanceof NotFoundException || error instanceof BadRequestException) {
         throw error;
       }
       this.logger.error(`Failed to update customer settings ${id}: ${error.message}`, error.stack);
@@ -111,11 +157,17 @@ export class CustomerSettingsService {
   async delete(id: string): Promise<void> {
     this.logger.log(`Deleting customer settings: ${id}`);
     try {
-      const customerSettings = await this.customerSettingsRepository.delete(id);
+      const customerSettings = await this.customerSettingsRepository.findById(id);
       if (!customerSettings) {
         this.logger.warn(`Customer settings not found for deletion: ${id}`);
         throw new NotFoundException('Customer settings not found');
       }
+
+      if (customerSettings.status === BotStatus.ACTIVE && customerSettings.botType === BotType.TG) {
+        await this.deactivateTelegramBot(id, customerSettings);
+      }
+
+      await this.customerSettingsRepository.delete(id);
       this.logger.log(`Customer settings deleted successfully: ${id}`);
     } catch (error) {
       if (error instanceof NotFoundException) {
@@ -125,6 +177,54 @@ export class CustomerSettingsService {
       throw error;
     }
   }
+
+  // ─────────────── Telegram Bot Lifecycle ───────────────
+
+  private async activateTelegramBot(
+    botId: string,
+    settings: CustomerSettingsDocument,
+  ): Promise<void> {
+    if (!settings.webhookSecret) {
+      throw new BadRequestException('Webhook secret not configured for this bot');
+    }
+
+    const decryptedSecret = this.webhookSecretService.decrypt(settings.webhookSecret);
+
+    await this.telegramWebhookService.registerWebhook(
+      settings.token,
+      botId,
+      decryptedSecret,
+    );
+
+    await this.botCacheService.set(botId, {
+      webhookSecret: decryptedSecret,
+      customerId: settings.customerId,
+      botType: settings.botType,
+    });
+
+    this.logger.log(`Telegram bot ${botId} activated: webhook registered, cache populated`);
+  }
+
+  private async deactivateTelegramBot(
+    botId: string,
+    settings: CustomerSettingsDocument,
+  ): Promise<void> {
+    await this.telegramWebhookService
+      .deleteWebhook(settings.token)
+      .catch((e) =>
+        this.logger.error(`Failed to delete webhook for bot ${botId}: ${e.message}`),
+      );
+
+    await this.botCacheService
+      .invalidate(botId)
+      .catch((e) =>
+        this.logger.error(`Failed to invalidate cache for bot ${botId}: ${e.message}`),
+      );
+
+    this.logger.log(`Telegram bot ${botId} deactivated: webhook deleted, cache invalidated`);
+  }
+
+  // ─────────────── Mapping ───────────────
 
   private mapToResponseDto(
     customerSettings: CustomerSettingsDocument,

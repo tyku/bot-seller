@@ -3,6 +3,9 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { CustomerSettingsController } from './customer-settings.controller';
 import { CustomerSettingsService } from './customer-settings.service';
 import { CustomerSettingsRepository } from './customer-settings.repository';
+import { WebhookSecretService } from './services/webhook-secret.service';
+import { BotCacheService } from './services/bot-cache.service';
+import { TelegramWebhookService } from './services/telegram-webhook.service';
 import {
   CustomerSettings,
   CustomerSettingsSchema,
@@ -15,7 +18,13 @@ import {
     ]),
   ],
   controllers: [CustomerSettingsController],
-  providers: [CustomerSettingsService, CustomerSettingsRepository],
-  exports: [CustomerSettingsService, CustomerSettingsRepository],
+  providers: [
+    CustomerSettingsService,
+    CustomerSettingsRepository,
+    WebhookSecretService,
+    BotCacheService,
+    TelegramWebhookService,
+  ],
+  exports: [CustomerSettingsService, CustomerSettingsRepository, BotCacheService],
 })
 export class CustomerSettingsModule {}

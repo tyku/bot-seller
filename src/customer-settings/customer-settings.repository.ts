@@ -4,6 +4,8 @@ import { Model } from 'mongoose';
 import {
   CustomerSettings,
   CustomerSettingsDocument,
+  BotStatus,
+  BotType,
 } from './schemas/customer-settings.schema';
 import type { CreateCustomerSettingsDto } from './dto/create-customer-settings.dto';
 
@@ -15,11 +17,9 @@ export class CustomerSettingsRepository {
   ) {}
 
   async create(
-    createCustomerSettingsDto: CreateCustomerSettingsDto,
+    data: CreateCustomerSettingsDto & { webhookSecret?: string },
   ): Promise<CustomerSettingsDocument> {
-    const customerSettings = new this.customerSettingsModel(
-      createCustomerSettingsDto,
-    );
+    const customerSettings = new this.customerSettingsModel(data);
     return customerSettings.save();
   }
 
@@ -35,6 +35,13 @@ export class CustomerSettingsRepository {
 
   async findAll(): Promise<CustomerSettingsDocument[]> {
     return this.customerSettingsModel.find().exec();
+  }
+
+  async findByStatusAndBotType(
+    status: BotStatus,
+    botType: BotType,
+  ): Promise<CustomerSettingsDocument[]> {
+    return this.customerSettingsModel.find({ status, botType }).exec();
   }
 
   async update(

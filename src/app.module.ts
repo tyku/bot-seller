@@ -1,7 +1,9 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
+import { BullModule } from '@nestjs/bullmq';
 import { APP_GUARD } from '@nestjs/core';
+import { RedisModule } from './common/redis/redis.module';
 import { CustomerModule } from './customer/customer.module';
 import { CustomerSettingsModule } from './customer-settings/customer-settings.module';
 import { AuthModule } from './auth/auth.module';
@@ -27,6 +29,16 @@ import { validate } from './config/env.validation';
         uri: configService.get<string>('database.uri'),
       }),
     }),
+    BullModule.forRootAsync({
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService) => ({
+        connection: {
+          host: configService.get<string>('redis.host'),
+          port: configService.get<number>('redis.port'),
+        },
+      }),
+    }),
+    RedisModule,
     CustomerModule,
     CustomerSettingsModule,
     AuthModule,

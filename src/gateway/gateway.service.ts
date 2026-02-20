@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
-import { CustomerSettingsRepository } from '../customer-settings/customer-settings.repository';
+import { BotCacheService } from '../customer-settings/services/bot-cache.service';
 import { BotType } from '../customer-settings/schemas/customer-settings.schema';
 import { DeduplicationService } from './services/deduplication.service';
 import { SubscriptionService } from './services/subscription.service';
@@ -19,7 +19,7 @@ export class GatewayService {
   private readonly logger = new Logger(GatewayService.name);
 
   constructor(
-    private readonly customerSettingsRepository: CustomerSettingsRepository,
+    private readonly botCacheService: BotCacheService,
     private readonly deduplicationService: DeduplicationService,
     private readonly subscriptionService: SubscriptionService,
     @InjectQueue(TELEGRAM_INCOMING_QUEUE) private readonly telegramQueue: Queue,
@@ -30,38 +30,34 @@ export class GatewayService {
     secretToken: string | undefined,
     update: TelegramUpdate,
   ): Promise<void> {
-    const settings = await this.customerSettingsRepository.findById(botId);
+    if (!secretToken) {
+      throw new ForbiddenException('Missing secret token');
+    }
 
-    if (!settings) {
-      this.logger.warn(`Bot not found: ${botId}`);
+    const bot = await this.botCacheService.get(botId);
+    if (!bot) {
+      this.logger.warn(`Bot not found or inactive: ${botId}`);
       throw new NotFoundException('Bot not found');
     }
 
-    if (settings.botType !== BotType.TG) {
-      this.logger.warn(`Bot ${botId} is not a Telegram bot`);
+    if (bot.botType !== BotType.TG) {
       throw new BadRequestException('Bot type mismatch');
     }
 
-    if (!settings.webhookSecret) {
-      this.logger.warn(`Bot ${botId} has no webhookSecret configured`);
-      throw new ForbiddenException('Webhook not configured');
-    }
-
-    if (!secretToken || secretToken !== settings.webhookSecret) {
+    if (secretToken !== bot.webhookSecret) {
       this.logger.warn(`Invalid secret token for bot ${botId}`);
       throw new ForbiddenException('Invalid secret token');
     }
 
     const isActive = await this.subscriptionService.isSubscriptionActive(
-      settings.customerId,
+      bot.customerId,
     );
     if (!isActive) {
-      this.logger.warn(`Subscription inactive for customer ${settings.customerId}`);
+      this.logger.warn(`Subscription inactive for customer ${bot.customerId}`);
       throw new ForbiddenException('Subscription inactive');
     }
 
     if (!update.update_id) {
-      this.logger.warn(`Missing update_id in webhook payload for bot ${botId}`);
       throw new BadRequestException('Invalid update: missing update_id');
     }
 
@@ -76,8 +72,8 @@ export class GatewayService {
 
     const job: TelegramIncomingJob = {
       botId,
-      customerId: settings.customerId,
-      botType: settings.botType,
+      customerId: bot.customerId,
+      botType: bot.botType,
       update,
       receivedAt: Date.now(),
     };
@@ -94,7 +90,7 @@ export class GatewayService {
     );
 
     this.logger.log(
-      `Enqueued update ${update.update_id} for bot ${botId} (customer ${settings.customerId})`,
+      `Enqueued update ${update.update_id} for bot ${botId} (customer ${bot.customerId})`,
     );
   }
 }

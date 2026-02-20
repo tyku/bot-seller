@@ -11,6 +11,14 @@ export default () => ({
     port: parseInt(process.env.REDIS_PORT || '6379', 10),
   },
   
+  encryption: {
+    key: process.env.ENCRYPTION_KEY || 'dev-only-key-change-in-production',
+  },
+  
+  gateway: {
+    baseUrl: process.env.GATEWAY_BASE_URL || 'http://localhost:3000',
+  },
+  
   jwt: {
     secret: process.env.JWT_SECRET || 'your-secret-key-change-in-production',
     expiresIn: '24h',
