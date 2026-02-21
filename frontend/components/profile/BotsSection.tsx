@@ -47,6 +47,7 @@ export function BotsSection() {
   const [formMode, setFormMode] = useState<'closed' | 'create' | 'edit'>('closed');
   const [editingBotId, setEditingBotId] = useState<string | null>(null);
   const [error, setError] = useState('');
+  const [actionError, setActionError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const {
@@ -159,18 +160,30 @@ export function BotsSection() {
   };
 
   const handleStatusChange = async (id: string, newStatus: BotStatusType) => {
+    setActionError('');
     try {
       const response = await settingsApi.update(id, { status: newStatus });
       setBots((prev) => prev.map((b) => (b.id === id ? response.data : b)));
     } catch (err) {
-      console.error('Failed to update status:', err);
+      const msg = getErrorMessage(err, 'Не удалось изменить статус бота');
+      setActionError(msg);
     }
   };
 
   const isFormOpen = formMode !== 'closed';
 
+  const isDevMode = process.env.NODE_ENV === 'development';
+
   return (
     <div className="space-y-6">
+      {isDevMode && (
+        <div className="bg-amber-50 border border-amber-200 text-amber-800 px-4 py-3 rounded-lg text-sm flex items-center gap-2">
+          <span className="font-medium">DEV</span>
+          <span className="text-amber-600">|</span>
+          Локальный режим — webhook&apos;и Telegram не регистрируются, некоторые функции могут быть недоступны
+        </div>
+      )}
+
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">Мои боты</h2>
@@ -309,6 +322,18 @@ export function BotsSection() {
             </div>
           </form>
         </Card>
+      )}
+
+      {actionError && (
+        <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-lg text-sm flex items-center justify-between">
+          <span>{actionError}</span>
+          <button
+            onClick={() => setActionError('')}
+            className="text-red-500 hover:text-red-700 ml-4 font-medium"
+          >
+            &times;
+          </button>
+        </div>
       )}
 
       {isLoadingBots ? (
