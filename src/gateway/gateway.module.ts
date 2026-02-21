@@ -4,6 +4,7 @@ import { GatewayController } from './gateway.controller';
 import { GatewayService } from './gateway.service';
 import { DeduplicationService } from './services/deduplication.service';
 import { SubscriptionService } from './services/subscription.service';
+import { TelegramIncomingProcessor } from './processors/telegram-incoming.processor';
 import { CustomerSettingsModule } from '../customer-settings/customer-settings.module';
 import { TELEGRAM_INCOMING_QUEUE } from './constants';
 
@@ -13,6 +14,11 @@ import { TELEGRAM_INCOMING_QUEUE } from './constants';
     BullModule.registerQueue({ name: TELEGRAM_INCOMING_QUEUE }),
   ],
   controllers: [GatewayController],
-  providers: [GatewayService, DeduplicationService, SubscriptionService],
+  providers: [
+    GatewayService,
+    DeduplicationService,
+    SubscriptionService,
+    TelegramIncomingProcessor,
+  ],
 })
 export class GatewayModule {}
