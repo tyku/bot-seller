@@ -7,7 +7,10 @@ import { ConversationsService } from '../../conversations/conversations.service'
 import { ConversationPlatform } from '../../conversations/schemas/conversation.schema';
 import { SourceType } from '../../user/schemas/user.schema';
 import { TELEGRAM_INCOMING_QUEUE } from '../constants';
-import type { TelegramIncomingJob } from '../interfaces/telegram-update.interface';
+import type {
+  TelegramIncomingJob,
+  TelegramUpdate,
+} from '../interfaces/telegram-update.interface';
 
 const ECHO_REPLIES = [
   'Принял! Скоро тут будет умный ответ.',
@@ -38,32 +41,13 @@ export class TelegramIncomingProcessor extends WorkerHost {
 
     const chatId = update.message?.chat?.id;
     if (!chatId) {
-      this.logger.debug(`No chat_id in update ${update.update_id}, skipping reply`);
+      this.logger.debug(
+        `No chat_id in update ${update.update_id}, skipping reply`,
+      );
       return;
     }
 
-    const isStartCommand = /^\/start(\s|@|$)/i.test(
-      (update.message?.text ?? '').trim(),
-    );
-    const from = update.message?.from ?? update.callback_query?.from;
-    if (from && isStartCommand) {
-      try {
-        await this.userService.upsertByExternalId(
-          SourceType.TG,
-          String(from.id),
-          {
-            chatId: String(chatId),
-            firstName: from.first_name,
-            lastName: from.last_name,
-            username: from.username ?? undefined,
-            languageCode: from.language_code ?? undefined,
-          },
-        );
-        this.logger.log(`User ${from.id} saved/updated after /start for bot ${botId}`);
-      } catch (err) {
-        this.logger.warn(`Failed to upsert user ${from.id}: ${err.message}`);
-      }
-    }
+    await this.ensureUserOnStart(update, chatId, botId);
 
     const settings = await this.settingsRepository.findById(botId);
     if (!settings) {
@@ -71,30 +55,86 @@ export class TelegramIncomingProcessor extends WorkerHost {
       return;
     }
 
-    const userText = update.message?.text ?? update.callback_query?.data ?? '';
-    if (userText) {
-      try {
-        await this.conversationsService.addUserMessage(
-          ConversationPlatform.TG,
-          String(chatId),
-          botId,
-          userText,
-        );
-      } catch (err) {
-        this.logger.warn(
-          `Failed to add message to conversation: ${err?.message ?? err}`,
-        );
-      }
+    const userText =
+      update.message?.text ?? update.callback_query?.data ?? '';
+    await this.addUserMessageToConversation(chatId, botId, userText);
+
+    const text = this.buildReplyText(userText);
+    await this.sendReply(settings.token, chatId, text, botId);
+  }
+
+  private async ensureUserOnStart(
+    update: TelegramUpdate,
+    chatId: number,
+    botId: string,
+  ): Promise<void> {
+    const isStartCommand = /^\/start(\s|@|$)/i.test(
+      (update.message?.text ?? '').trim(),
+    );
+    const from = update.message?.from ?? update.callback_query?.from;
+
+    if (!from || !isStartCommand) {
+      return;
     }
 
-    const reply = ECHO_REPLIES[Math.floor(Math.random() * ECHO_REPLIES.length)];
-    const text = userText
-      ? `${reply}\n\nТы написал: «${userText}»`
-      : reply;
+    try {
+      await this.userService.upsertByExternalId(
+        SourceType.TG,
+        String(from.id),
+        {
+          chatId: String(chatId),
+          firstName: from.first_name,
+          lastName: from.last_name,
+          username: from.username ?? undefined,
+          languageCode: from.language_code ?? undefined,
+        },
+      );
+      this.logger.log(
+        `User ${from.id} saved/updated after /start for bot ${botId}`,
+      );
+    } catch (err) {
+      this.logger.warn(`Failed to upsert user ${from.id}: ${err.message}`);
+    }
+  }
+
+  private async addUserMessageToConversation(
+    chatId: number,
+    botId: string,
+    userText: string,
+  ): Promise<void> {
+    if (!userText) {
+      return;
+    }
 
     try {
+      await this.conversationsService.addUserMessage(
+        ConversationPlatform.TG,
+        String(chatId),
+        botId,
+        userText,
+      );
+    } catch (err) {
+      this.logger.warn(
+        `Failed to add message to conversation: ${err?.message ?? err}`,
+      );
+    }
+  }
+
+  private buildReplyText(userText: string): string {
+    const reply =
+      ECHO_REPLIES[Math.floor(Math.random() * ECHO_REPLIES.length)];
+    return userText ? `${reply}\n\nТы написал: «${userText}»` : reply;
+  }
+
+  private async sendReply(
+    token: string,
+    chatId: number,
+    text: string,
+    botId: string,
+  ): Promise<void> {
+    try {
       const res = await fetch(
-        `https://api.telegram.org/bot${settings.token}/sendMessage`,
+        `https://api.telegram.org/bot${token}/sendMessage`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
