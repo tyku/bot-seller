@@ -11,6 +11,7 @@ import { VerificationModule } from './verification/verification.module';
 import { TelegramModule } from './telegram/telegram.module';
 import { UserModule } from './user/user.module';
 import { GatewayModule } from './gateway/gateway.module';
+import { ConversationsModule } from './conversations/conversations.module';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import configuration from './config/configuration';
 import { validate } from './config/env.validation';
@@ -48,6 +49,7 @@ import { validate } from './config/env.validation';
     TelegramModule,
     UserModule,
     GatewayModule,
+    ConversationsModule,
   ],
   controllers: [],
   providers: [

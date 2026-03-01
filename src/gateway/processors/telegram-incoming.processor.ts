@@ -3,6 +3,8 @@ import { Logger } from '@nestjs/common';
 import { Job } from 'bullmq';
 import { CustomerSettingsRepository } from '../../customer-settings/customer-settings.repository';
 import { UserService } from '../../user/user.service';
+import { ConversationsService } from '../../conversations/conversations.service';
+import { ConversationPlatform } from '../../conversations/schemas/conversation.schema';
 import { SourceType } from '../../user/schemas/user.schema';
 import { TELEGRAM_INCOMING_QUEUE } from '../constants';
 import type { TelegramIncomingJob } from '../interfaces/telegram-update.interface';
@@ -22,6 +24,7 @@ export class TelegramIncomingProcessor extends WorkerHost {
   constructor(
     private readonly settingsRepository: CustomerSettingsRepository,
     private readonly userService: UserService,
+    private readonly conversationsService: ConversationsService,
   ) {
     super();
   }
@@ -68,8 +71,23 @@ export class TelegramIncomingProcessor extends WorkerHost {
       return;
     }
 
+    const userText = update.message?.text ?? update.callback_query?.data ?? '';
+    if (userText) {
+      try {
+        await this.conversationsService.addUserMessage(
+          ConversationPlatform.TG,
+          String(chatId),
+          botId,
+          userText,
+        );
+      } catch (err) {
+        this.logger.warn(
+          `Failed to add message to conversation: ${err?.message ?? err}`,
+        );
+      }
+    }
+
     const reply = ECHO_REPLIES[Math.floor(Math.random() * ECHO_REPLIES.length)];
-    const userText = update.message?.text ?? '';
     const text = userText
       ? `${reply}\n\nТы написал: «${userText}»`
       : reply;
