@@ -1,0 +1,41 @@
+# Redis для production — пароль, persistence, лимиты
+# Запуск: REDIS_PASSWORD=your-strong-password docker compose -f docker-compose.redis.prod.yaml up -d
+# Или положи пароль в .env.prod и: docker compose -f docker-compose.redis.prod.yaml --env-file .env.prod up -d
+
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: bot-seller-redis-prod
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command:
+      - redis-server
+      - --requirepass
+      - ${REDIS_PASSWORD}
+      - --appendonly
+      - yes
+      - --appendfsync
+      - everysec
+      - --maxmemory
+      - 256mb
+      - --maxmemory-policy
+      - allkeys-lru
+    volumes:
+      - redis_prod_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - bot-seller-network
+
+volumes:
+  redis_prod_data:
+    driver: local
+
+networks:
+  bot-seller-network:
+    driver: bridge

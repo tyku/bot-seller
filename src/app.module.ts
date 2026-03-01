@@ -35,6 +35,8 @@ import { validate } from './config/env.validation';
         connection: {
           host: configService.get<string>('redis.host'),
           port: configService.get<number>('redis.port'),
+          username: configService.get<string>('redis.user'),
+          password: configService.get<string>('redis.password'),
         },
       }),
     }),

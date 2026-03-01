@@ -1,6 +1,6 @@
 import { Global, Module, OnModuleDestroy, Inject } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import Redis from 'ioredis';
+import Redis, { RedisOptions } from 'ioredis';
 
 @Global()
 @Module({
@@ -8,11 +8,15 @@ import Redis from 'ioredis';
     {
       provide: 'REDIS_CLIENT',
       useFactory: (configService: ConfigService) => {
-        return new Redis({
+        const opts: RedisOptions = {
           host: configService.get<string>('redis.host'),
           port: configService.get<number>('redis.port'),
+          password: configService.get<string>('redis.password'),
           maxRetriesPerRequest: 3,
-        });
+        };
+        const user = configService.get<string>('redis.user');
+        if (user) opts.username = user;
+        return new Redis(opts);
       },
       inject: [ConfigService],
     },

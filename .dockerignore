@@ -1,0 +1,19 @@
+.git
+.gitignore
+*.md
+
+# backend
+node_modules
+dist
+
+# frontend
+frontend/node_modules
+frontend/.next
+
+# env files (inject at runtime)
+.env
+.env.*
+
+# tests
+test
+coverage
