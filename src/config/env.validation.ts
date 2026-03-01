@@ -68,6 +68,20 @@ class EnvironmentVariables {
   @IsString()
   @IsOptional()
   TELEGRAM_BOT_TOKEN?: string;
+
+  // OpenRouter (LLM)
+  @IsString()
+  @IsOptional()
+  OPENROUTER_API_KEY?: string;
+
+  @IsString()
+  @IsOptional()
+  OPENROUTER_DEFAULT_MODEL?: string;
+
+  @IsNumber()
+  @Min(1)
+  @IsOptional()
+  LLM_RATE_LIMIT_PER_BOT_PER_HOUR?: number;
 }
 
 export function validate(config: Record<string, unknown>) {

@@ -3,6 +3,7 @@ import { ConversationsRepository } from './conversations.repository';
 import {
   ConversationPlatform,
   ConversationMessageType,
+  ConversationMessage,
 } from './schemas/conversation.schema';
 
 @Injectable()
@@ -38,10 +39,13 @@ export class ConversationsService {
     content: string,
   ) {
     const conversation = await this.getOrCreate(platform, chatId, botId);
-    return this.conversationsRepository.appendMessage(conversation.id, {
-      type: ConversationMessageType.USER,
-      content,
-    });
+    return this.conversationsRepository.appendMessage(
+      String(conversation._id),
+      {
+        type: ConversationMessageType.USER,
+        content,
+      },
+    );
   }
 
   async addSystemMessage(
@@ -51,9 +55,27 @@ export class ConversationsService {
     content: string,
   ) {
     const conversation = await this.getOrCreate(platform, chatId, botId);
-    return this.conversationsRepository.appendMessage(conversation.id, {
-      type: ConversationMessageType.SYSTEM,
-      content,
-    });
+    return this.conversationsRepository.appendMessage(
+      String(conversation._id),
+      {
+        type: ConversationMessageType.SYSTEM,
+        content,
+      },
+    );
+  }
+
+  /** Сообщения диалога для контекста LLM (после добавления последнего сообщения пользователя). */
+  async getMessages(
+    platform: ConversationPlatform,
+    chatId: string,
+    botId: string,
+  ): Promise<ConversationMessage[]> {
+    const conversation =
+      await this.conversationsRepository.findByPlatformChatAndBot(
+        platform,
+        chatId,
+        botId,
+      );
+    return conversation?.messages ?? [];
   }
 }

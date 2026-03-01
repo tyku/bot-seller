@@ -4,21 +4,16 @@ import { Job } from 'bullmq';
 import { CustomerSettingsRepository } from '../../customer-settings/customer-settings.repository';
 import { UserService } from '../../user/user.service';
 import { ConversationsService } from '../../conversations/conversations.service';
-import { ConversationPlatform } from '../../conversations/schemas/conversation.schema';
+import { ConversationPlatform, ConversationMessageType } from '../../conversations/schemas/conversation.schema';
 import { SourceType } from '../../user/schemas/user.schema';
+import { LlmService, type OpenRouterMessage } from '../../llm/llm.service';
+import { LlmRateLimitService } from '../../llm/llm-rate-limit.service';
 import { TELEGRAM_INCOMING_QUEUE } from '../constants';
 import type {
   TelegramIncomingJob,
   TelegramUpdate,
 } from '../interfaces/telegram-update.interface';
-
-const ECHO_REPLIES = [
-  'Принял! Скоро тут будет умный ответ.',
-  'Сообщение получено, обрабатываю...',
-  'Я пока учусь, но уже слышу тебя!',
-  'Roger that!',
-  '👋 Привет! Я бот-заглушка. Скоро стану умнее.',
-];
+import { PromptType } from '../../customer-settings/schemas/customer-settings.schema';
 
 @Processor(TELEGRAM_INCOMING_QUEUE)
 export class TelegramIncomingProcessor extends WorkerHost {
@@ -28,6 +23,8 @@ export class TelegramIncomingProcessor extends WorkerHost {
     private readonly settingsRepository: CustomerSettingsRepository,
     private readonly userService: UserService,
     private readonly conversationsService: ConversationsService,
+    private readonly llmService: LlmService,
+    private readonly llmRateLimit: LlmRateLimitService,
   ) {
     super();
   }
@@ -59,7 +56,27 @@ export class TelegramIncomingProcessor extends WorkerHost {
       update.message?.text ?? update.callback_query?.data ?? '';
     await this.addUserMessageToConversation(chatId, botId, userText);
 
-    const text = this.buildReplyText(userText);
+    const messages = await this.conversationsService.getMessages(
+      ConversationPlatform.TG,
+      String(chatId),
+      botId,
+    );
+    const hasContext = userText.trim() !== '' || messages.length > 0;
+
+    if (hasContext) {
+      const rateLimit = await this.llmRateLimit.checkAndConsume(botId);
+      if (!rateLimit.allowed) {
+        await this.sendReply(
+          settings.token,
+          chatId,
+          rateLimit.message ?? 'Оператор работает над вашим запросом, ожидайте обработки.',
+          botId,
+        );
+        return;
+      }
+    }
+
+    const text = await this.buildReplyWithLlm(settings, chatId, botId, userText, messages);
     await this.sendReply(settings.token, chatId, text, botId);
   }
 
@@ -120,10 +137,38 @@ export class TelegramIncomingProcessor extends WorkerHost {
     }
   }
 
-  private buildReplyText(userText: string): string {
-    const reply =
-      ECHO_REPLIES[Math.floor(Math.random() * ECHO_REPLIES.length)];
-    return userText ? `${reply}\n\nТы написал: «${userText}»` : reply;
+  private async buildReplyWithLlm(
+    settings: Awaited<ReturnType<CustomerSettingsRepository['findById']>>,
+    chatId: number,
+    botId: string,
+    userText: string,
+    messages: Awaited<ReturnType<ConversationsService['getMessages']>>,
+  ): Promise<string> {
+    const openRouterMessages: OpenRouterMessage[] = [];
+
+    const contextPrompt = settings?.prompts?.find(
+      (p) => p.type === PromptType.CONTEXT,
+    );
+    if (contextPrompt?.body) {
+      openRouterMessages.push({ role: 'system', content: contextPrompt.body });
+    }
+
+    for (const m of messages) {
+      openRouterMessages.push({
+        role: m.type === ConversationMessageType.SYSTEM ? 'system' : 'user',
+        content: m.content,
+      });
+    }
+
+    if (openRouterMessages.length === 0 && userText) {
+      openRouterMessages.push({ role: 'user', content: userText });
+    }
+
+    if (openRouterMessages.length === 0) {
+      return 'Чем могу помочь?';
+    }
+
+    return this.llmService.chat({ messages: openRouterMessages });
   }
 
   private async sendReply(

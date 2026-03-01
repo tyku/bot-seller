@@ -35,4 +35,13 @@ export default () => ({
     botToken: process.env.TELEGRAM_BOT_TOKEN,
     botUsername: process.env.TELEGRAM_BOT_USERNAME || 'your_bot',
   },
+
+  openRouter: {
+    apiKey: process.env.OPENROUTER_API_KEY,
+    defaultModel: process.env.OPENROUTER_DEFAULT_MODEL || 'openai/gpt-4o-mini',
+    /** Лимит запросов к LLM на бота в час (по умолчанию; по тарифу может быть из БД) */
+    rateLimitPerBotPerHour:
+      parseInt(process.env.LLM_RATE_LIMIT_PER_BOT_PER_HOUR || '2000', 10) ||
+      2000,
+  },
 });
