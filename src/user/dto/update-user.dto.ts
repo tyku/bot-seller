@@ -1,6 +1,11 @@
 import { z } from 'zod';
 
 export const UpdateUserSchema = z.object({
+  chatId: z
+    .string()
+    .max(50)
+    .optional(),
+
   firstName: z
     .string()
     .max(100)

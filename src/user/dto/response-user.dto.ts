@@ -4,6 +4,7 @@ export class ResponseUserDto {
   id: string;
   sourceType: SourceType;
   externalId: string;
+  chatId: string;
   firstName: string;
   lastName: string;
   username: string;

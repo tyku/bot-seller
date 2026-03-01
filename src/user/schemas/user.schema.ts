@@ -16,6 +16,10 @@ export class User {
   @Prop({ required: true, index: true })
   externalId: string;
 
+  /** Telegram chat id (for private chat = user id; for groups = group id). */
+  @Prop({ sparse: true, index: true })
+  chatId: string;
+
   @Prop()
   firstName: string;
 

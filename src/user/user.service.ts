@@ -112,6 +112,7 @@ export class UserService {
       id: user._id.toString(),
       sourceType: user.sourceType,
       externalId: user.externalId,
+      chatId: user.chatId,
       firstName: user.firstName,
       lastName: user.lastName,
       username: user.username,

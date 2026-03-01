@@ -8,6 +8,11 @@ export const CreateUserSchema = z.object({
     .string()
     .min(1, 'External ID is required'),
 
+  chatId: z
+    .string()
+    .max(50)
+    .optional(),
+
   firstName: z
     .string()
     .max(100)

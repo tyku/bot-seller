@@ -6,11 +6,13 @@ import { DeduplicationService } from './services/deduplication.service';
 import { SubscriptionService } from './services/subscription.service';
 import { TelegramIncomingProcessor } from './processors/telegram-incoming.processor';
 import { CustomerSettingsModule } from '../customer-settings/customer-settings.module';
+import { UserModule } from '../user/user.module';
 import { TELEGRAM_INCOMING_QUEUE } from './constants';
 
 @Module({
   imports: [
     CustomerSettingsModule,
+    UserModule,
     BullModule.registerQueue({ name: TELEGRAM_INCOMING_QUEUE }),
   ],
   controllers: [GatewayController],

@@ -2,6 +2,8 @@ import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Logger } from '@nestjs/common';
 import { Job } from 'bullmq';
 import { CustomerSettingsRepository } from '../../customer-settings/customer-settings.repository';
+import { UserService } from '../../user/user.service';
+import { SourceType } from '../../user/schemas/user.schema';
 import { TELEGRAM_INCOMING_QUEUE } from '../constants';
 import type { TelegramIncomingJob } from '../interfaces/telegram-update.interface';
 
@@ -19,6 +21,7 @@ export class TelegramIncomingProcessor extends WorkerHost {
 
   constructor(
     private readonly settingsRepository: CustomerSettingsRepository,
+    private readonly userService: UserService,
   ) {
     super();
   }
@@ -34,6 +37,29 @@ export class TelegramIncomingProcessor extends WorkerHost {
     if (!chatId) {
       this.logger.debug(`No chat_id in update ${update.update_id}, skipping reply`);
       return;
+    }
+
+    const isStartCommand = /^\/start(\s|@|$)/i.test(
+      (update.message?.text ?? '').trim(),
+    );
+    const from = update.message?.from ?? update.callback_query?.from;
+    if (from && isStartCommand) {
+      try {
+        await this.userService.upsertByExternalId(
+          SourceType.TG,
+          String(from.id),
+          {
+            chatId: String(chatId),
+            firstName: from.first_name,
+            lastName: from.last_name,
+            username: from.username ?? undefined,
+            languageCode: from.language_code ?? undefined,
+          },
+        );
+        this.logger.log(`User ${from.id} saved/updated after /start for bot ${botId}`);
+      } catch (err) {
+        this.logger.warn(`Failed to upsert user ${from.id}: ${err.message}`);
+      }
     }
 
     const settings = await this.settingsRepository.findById(botId);
