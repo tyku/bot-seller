@@ -1,5 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { CustomerSettingsRepository } from '../customer-settings/customer-settings.repository';
+import { ConversationsService } from '../conversations/conversations.service';
+import {
+  ConversationPlatform,
+  ConversationMessageType,
+} from '../conversations/schemas/conversation.schema';
+import { PromptType } from '../customer-settings/schemas/customer-settings.schema';
 import { LLM_MODELS, type LlmModelId } from './constants';
 
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
@@ -20,11 +27,63 @@ export class LlmService {
   private readonly apiKey: string | undefined;
   private readonly defaultModel: string;
 
-  constructor(private readonly configService: ConfigService) {
+  constructor(
+    private readonly configService: ConfigService,
+    private readonly customerSettingsRepository: CustomerSettingsRepository,
+    private readonly conversationsService: ConversationsService,
+  ) {
     this.apiKey = this.configService.get<string>('openRouter.apiKey');
     this.defaultModel =
       this.configService.get<string>('openRouter.defaultModel') ??
       LLM_MODELS.DEFAULT;
+  }
+
+  /**
+   * Берёт промпт из настроек кастомера (botId), контекст из conversations,
+   * собирает сообщения и возвращает ответ LLM.
+   */
+  async chatWithContext(
+    botId: string,
+    platform: ConversationPlatform,
+    chatId: string,
+  ): Promise<string> {
+    const messages = await this.buildMessagesFromContext(botId, platform, chatId);
+    if (messages.length === 0) {
+      return 'Чем могу помочь?';
+    }
+    return this.chat({ messages });
+  }
+
+  /**
+   * Собирает массив сообщений для LLM: системный промпт из настроек бота + история диалога.
+   */
+  private async buildMessagesFromContext(
+    botId: string,
+    platform: ConversationPlatform,
+    chatId: string,
+  ): Promise<OpenRouterMessage[]> {
+    const settings = await this.customerSettingsRepository.findById(botId);
+    const contextPrompt = settings?.prompts?.find((p) => p.type === PromptType.CONTEXT);
+    const conversationMessages = await this.conversationsService.getMessages(
+      platform,
+      chatId,
+      botId,
+    );
+
+    const openRouterMessages: OpenRouterMessage[] = [];
+
+    if (contextPrompt?.body) {
+      openRouterMessages.push({ role: 'system', content: contextPrompt.body });
+    }
+
+    for (const m of conversationMessages) {
+      openRouterMessages.push({
+        role: m.type === ConversationMessageType.SYSTEM ? 'system' : 'user',
+        content: m.content,
+      });
+    }
+
+    return openRouterMessages;
   }
 
   /**

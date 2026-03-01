@@ -4,16 +4,15 @@ import { Job } from 'bullmq';
 import { CustomerSettingsRepository } from '../../customer-settings/customer-settings.repository';
 import { UserService } from '../../user/user.service';
 import { ConversationsService } from '../../conversations/conversations.service';
-import { ConversationPlatform, ConversationMessageType } from '../../conversations/schemas/conversation.schema';
+import { ConversationPlatform } from '../../conversations/schemas/conversation.schema';
 import { SourceType } from '../../user/schemas/user.schema';
-import { LlmService, type OpenRouterMessage } from '../../llm/llm.service';
+import { LlmService } from '../../llm/llm.service';
 import { LlmRateLimitService } from '../../llm/llm-rate-limit.service';
 import { TELEGRAM_INCOMING_QUEUE } from '../constants';
 import type {
   TelegramIncomingJob,
   TelegramUpdate,
 } from '../interfaces/telegram-update.interface';
-import { PromptType } from '../../customer-settings/schemas/customer-settings.schema';
 
 @Processor(TELEGRAM_INCOMING_QUEUE)
 export class TelegramIncomingProcessor extends WorkerHost {
@@ -76,7 +75,11 @@ export class TelegramIncomingProcessor extends WorkerHost {
       }
     }
 
-    const text = await this.buildReplyWithLlm(settings, chatId, botId, userText, messages);
+    const text = await this.llmService.chatWithContext(
+      botId,
+      ConversationPlatform.TG,
+      String(chatId),
+    );
     await this.sendReply(settings.token, chatId, text, botId);
   }
 
@@ -135,40 +138,6 @@ export class TelegramIncomingProcessor extends WorkerHost {
         `Failed to add message to conversation: ${err?.message ?? err}`,
       );
     }
-  }
-
-  private async buildReplyWithLlm(
-    settings: Awaited<ReturnType<CustomerSettingsRepository['findById']>>,
-    chatId: number,
-    botId: string,
-    userText: string,
-    messages: Awaited<ReturnType<ConversationsService['getMessages']>>,
-  ): Promise<string> {
-    const openRouterMessages: OpenRouterMessage[] = [];
-
-    const contextPrompt = settings?.prompts?.find(
-      (p) => p.type === PromptType.CONTEXT,
-    );
-    if (contextPrompt?.body) {
-      openRouterMessages.push({ role: 'system', content: contextPrompt.body });
-    }
-
-    for (const m of messages) {
-      openRouterMessages.push({
-        role: m.type === ConversationMessageType.SYSTEM ? 'system' : 'user',
-        content: m.content,
-      });
-    }
-
-    if (openRouterMessages.length === 0 && userText) {
-      openRouterMessages.push({ role: 'user', content: userText });
-    }
-
-    if (openRouterMessages.length === 0) {
-      return 'Чем могу помочь?';
-    }
-
-    return this.llmService.chat({ messages: openRouterMessages });
   }
 
   private async sendReply(
