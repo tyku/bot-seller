@@ -99,6 +99,15 @@ export class LlmService {
     }
 
     try {
+      const payload = {
+        model,
+        messages: messages.map((m) => ({ role: m.role, content: m.content })),
+        stream: false,
+      };
+      this.logger.debug(
+        `OpenRouter request: model=${payload.model}, messages=${JSON.stringify(payload.messages)}`,
+      );
+
       const response = await fetch(OPENROUTER_URL, {
         method: 'POST',
         headers: {
@@ -107,11 +116,7 @@ export class LlmService {
           'HTTP-Referer': this.configService.get<string>('gateway.baseUrl') ?? '',
           'X-OpenRouter-Title': 'bot-seller',
         },
-        body: JSON.stringify({
-          model,
-          messages: messages.map((m) => ({ role: m.role, content: m.content })),
-          stream: false,
-        }),
+        body: JSON.stringify(payload),
       });
 
       if (!response.ok) {

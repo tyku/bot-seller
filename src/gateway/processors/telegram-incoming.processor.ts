@@ -140,6 +140,25 @@ export class TelegramIncomingProcessor extends WorkerHost {
     }
   }
 
+  /**
+   * Конвертирует Markdown (**bold**, ~~strikethrough~~, *italic*, `code`) в HTML для Telegram.
+   * @see https://core.telegram.org/bots/api#html-style
+   */
+  private markdownToTelegramHtml(text: string): string {
+    let out = text
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+    out = out
+      .replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
+      .replace(/__(.+?)__/g, '<b>$1</b>')
+      .replace(/~~(.+?)~~/g, '<s>$1</s>')
+      .replace(/(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)/g, '<i>$1</i>')
+      .replace(/(?<!_)_(?!_)(.+?)(?<!_)_(?!_)/g, '<i>$1</i>')
+      .replace(/`([^`]+)`/g, '<code>$1</code>');
+    return out;
+  }
+
   private async sendReply(
     token: string,
     chatId: number,
@@ -147,12 +166,17 @@ export class TelegramIncomingProcessor extends WorkerHost {
     botId: string,
   ): Promise<void> {
     try {
+      const html = this.markdownToTelegramHtml(text);
       const res = await fetch(
         `https://api.telegram.org/bot${token}/sendMessage`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ chat_id: chatId, text }),
+          body: JSON.stringify({
+            chat_id: chatId,
+            text: html,
+            parse_mode: 'HTML',
+          }),
         },
       );
       const result = await res.json();

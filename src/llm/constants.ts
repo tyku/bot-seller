@@ -5,7 +5,7 @@
  */
 export const LLM_MODELS = {
   /** Модель по умолчанию для чата */
-  DEFAULT: 'openai/gpt-4o-mini',
+  DEFAULT: 'qwen/qwen3-next-80b-a3b-instruct:free',
   /** Альтернативы при смене провайдера/модели */
   // OPENAI_GPT4O: 'openai/gpt-4o',
   // ANTHROPIC_CLAUDE: 'anthropic/claude-3.5-sonnet',
