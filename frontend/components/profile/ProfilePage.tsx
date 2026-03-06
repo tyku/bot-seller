@@ -1,11 +1,13 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ProfileTab } from '@/lib/types';
 import { useAuth } from '@/contexts/AuthContext';
 import { BotsSection } from './BotsSection';
 import { OrganizationSection } from './OrganizationSection';
 import { SubscriptionSection } from './SubscriptionSection';
+
+const PROFILE_TAB_KEY = 'profileTab';
 
 const TABS: { id: ProfileTab; label: string; icon: string }[] = [
   { id: 'bots', label: 'Боты', icon: '🤖' },
@@ -13,9 +15,20 @@ const TABS: { id: ProfileTab; label: string; icon: string }[] = [
   { id: 'subscription', label: 'Тариф', icon: '💳' },
 ];
 
+function getInitialTab(): ProfileTab {
+  if (typeof window === 'undefined') return 'bots';
+  const saved = localStorage.getItem(PROFILE_TAB_KEY);
+  if (saved === 'bots' || saved === 'organization' || saved === 'subscription') return saved;
+  return 'bots';
+}
+
 export function ProfilePage() {
   const { user, logout } = useAuth();
-  const [activeTab, setActiveTab] = useState<ProfileTab>('bots');
+  const [activeTab, setActiveTab] = useState<ProfileTab>(getInitialTab);
+
+  useEffect(() => {
+    localStorage.setItem(PROFILE_TAB_KEY, activeTab);
+  }, [activeTab]);
 
   const renderContent = () => {
     switch (activeTab) {
