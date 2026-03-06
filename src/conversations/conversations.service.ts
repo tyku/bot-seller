@@ -64,6 +64,22 @@ export class ConversationsService {
     );
   }
 
+  async addAssistantMessage(
+    platform: ConversationPlatform,
+    chatId: string,
+    botId: string,
+    content: string,
+  ) {
+    const conversation = await this.getOrCreate(platform, chatId, botId);
+    return this.conversationsRepository.appendMessage(
+      String(conversation._id),
+      {
+        type: ConversationMessageType.ASSISTANT,
+        content,
+      },
+    );
+  }
+
   /** Сообщения диалога для контекста LLM (после добавления последнего сообщения пользователя). */
   async getMessages(
     platform: ConversationPlatform,

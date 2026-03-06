@@ -80,6 +80,7 @@ export class TelegramIncomingProcessor extends WorkerHost {
       ConversationPlatform.TG,
       String(chatId),
     );
+    await this.saveAssistantReply(chatId, botId, text);
     await this.sendReply(settings.token, chatId, text, botId);
   }
 
@@ -136,6 +137,28 @@ export class TelegramIncomingProcessor extends WorkerHost {
     } catch (err) {
       this.logger.warn(
         `Failed to add message to conversation: ${err?.message ?? err}`,
+      );
+    }
+  }
+
+  private async saveAssistantReply(
+    chatId: number,
+    botId: string,
+    text: string,
+  ): Promise<void> {
+    if (!text) {
+      return;
+    }
+    try {
+      await this.conversationsService.addAssistantMessage(
+        ConversationPlatform.TG,
+        String(chatId),
+        botId,
+        text,
+      );
+    } catch (err) {
+      this.logger.warn(
+        `Failed to save assistant reply to conversation: ${err?.message ?? err}`,
       );
     }
   }

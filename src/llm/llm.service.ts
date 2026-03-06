@@ -77,10 +77,13 @@ export class LlmService {
     }
 
     for (const m of conversationMessages) {
-      openRouterMessages.push({
-        role: m.type === ConversationMessageType.SYSTEM ? 'system' : 'user',
-        content: m.content,
-      });
+      const role =
+        m.type === ConversationMessageType.SYSTEM
+          ? 'system'
+          : m.type === ConversationMessageType.ASSISTANT
+            ? 'assistant'
+            : 'user';
+      openRouterMessages.push({ role, content: m.content });
     }
 
     return openRouterMessages;

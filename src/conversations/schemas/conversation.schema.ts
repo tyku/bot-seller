@@ -10,6 +10,7 @@ export enum ConversationPlatform {
 
 export enum ConversationMessageType {
   USER = 'user',
+  ASSISTANT = 'assistant',
   SYSTEM = 'system',
 }
 
