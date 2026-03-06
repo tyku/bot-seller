@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -11,6 +12,8 @@ import { settingsApi, customerApi } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
 import { getErrorMessage } from '@/lib/error-utils';
 import { BotSettings, BotStatusType } from '@/lib/types';
+
+const BOT_PARAM = 'bot';
 
 const promptSchema = z.object({
   name: z.string().min(1, 'Введите название'),
@@ -42,13 +45,19 @@ const statusConfig: Record<BotStatusType, { label: string; color: string; dot: s
 
 export function BotsSection() {
   const { user, setUser } = useAuth();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [bots, setBots] = useState<BotSettings[]>([]);
   const [isLoadingBots, setIsLoadingBots] = useState(true);
-  const [formMode, setFormMode] = useState<'closed' | 'create' | 'edit'>('closed');
-  const [editingBotId, setEditingBotId] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [actionError, setActionError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const botParam = searchParams.get(BOT_PARAM);
+  const formMode: 'closed' | 'create' | 'edit' =
+    botParam === 'new' ? 'create' : botParam ? 'edit' : 'closed';
+  const editingBotId = botParam && botParam !== 'new' ? botParam : null;
+  const isFormOpen = formMode !== 'closed';
 
   const {
     register,
@@ -91,35 +100,63 @@ export function BotsSection() {
     init();
   }, [user, setUser]);
 
-  const openCreateForm = useCallback(() => {
-    reset(defaultFormValues);
-    setEditingBotId(null);
-    setError('');
-    setFormMode('create');
-  }, [reset]);
+  const pushBotsUrl = useCallback(
+    (params: { bot?: string }) => {
+      const next = new URLSearchParams(searchParams.toString());
+      if (params.bot !== undefined) {
+        if (params.bot) next.set(BOT_PARAM, params.bot);
+        else next.delete(BOT_PARAM);
+      }
+      router.push(`/?${next.toString()}`, { scroll: false });
+    },
+    [router, searchParams],
+  );
 
-  const openEditForm = useCallback((bot: BotSettings) => {
-    reset({
-      name: bot.name,
-      token: bot.token,
-      botType: bot.botType as 'tg' | 'vk',
-      prompts: bot.prompts.map((p) => ({
-        name: p.name,
-        body: p.body,
-        type: 'context' as const,
-      })),
-    });
-    setEditingBotId(bot.id ?? null);
-    setError('');
-    setFormMode('edit');
-  }, [reset]);
+  const openCreateForm = useCallback(() => {
+    pushBotsUrl({ bot: 'new' });
+  }, [pushBotsUrl]);
+
+  const openEditForm = useCallback(
+    (bot: BotSettings) => {
+      if (bot.id) pushBotsUrl({ bot: bot.id });
+    },
+    [pushBotsUrl],
+  );
 
   const closeForm = useCallback(() => {
-    setFormMode('closed');
-    setEditingBotId(null);
     setError('');
     reset(defaultFormValues);
-  }, [reset]);
+    pushBotsUrl({ bot: '' });
+  }, [reset, pushBotsUrl]);
+
+  // Синхронизация формы с URL (кнопка «Назад» или прямой переход по ссылке)
+  useEffect(() => {
+    if (formMode === 'create') {
+      setError('');
+      reset(defaultFormValues);
+      return;
+    }
+    if (formMode === 'edit' && editingBotId) {
+      if (!isLoadingBots && !bots.find((b) => b.id === editingBotId)) {
+        pushBotsUrl({ bot: '' });
+        return;
+      }
+      const bot = bots.find((b) => b.id === editingBotId);
+      if (bot) {
+        setError('');
+        reset({
+          name: bot.name,
+          token: bot.token,
+          botType: bot.botType as 'tg' | 'vk',
+          prompts: bot.prompts.map((p) => ({
+            name: p.name,
+            body: p.body,
+            type: 'context' as const,
+          })),
+        });
+      }
+    }
+  }, [formMode, editingBotId, bots, isLoadingBots, reset, pushBotsUrl]);
 
   const onSubmit = async (data: BotForm) => {
     if (!user) {
@@ -169,8 +206,6 @@ export function BotsSection() {
       setActionError(msg);
     }
   };
-
-  const isFormOpen = formMode !== 'closed';
 
   const isDevMode = process.env.NODE_ENV === 'development';
 

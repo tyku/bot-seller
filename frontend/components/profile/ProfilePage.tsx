@@ -1,13 +1,12 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useCallback } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { ProfileTab } from '@/lib/types';
 import { useAuth } from '@/contexts/AuthContext';
 import { BotsSection } from './BotsSection';
 import { OrganizationSection } from './OrganizationSection';
 import { SubscriptionSection } from './SubscriptionSection';
-
-const PROFILE_TAB_KEY = 'profileTab';
 
 const TABS: { id: ProfileTab; label: string; icon: string }[] = [
   { id: 'bots', label: 'Боты', icon: '🤖' },
@@ -15,20 +14,25 @@ const TABS: { id: ProfileTab; label: string; icon: string }[] = [
   { id: 'subscription', label: 'Тариф', icon: '💳' },
 ];
 
-function getInitialTab(): ProfileTab {
-  if (typeof window === 'undefined') return 'bots';
-  const saved = localStorage.getItem(PROFILE_TAB_KEY);
-  if (saved === 'bots' || saved === 'organization' || saved === 'subscription') return saved;
+function parseTab(param: string | null): ProfileTab {
+  if (param === 'organization' || param === 'subscription') return param;
   return 'bots';
 }
 
 export function ProfilePage() {
   const { user, logout } = useAuth();
-  const [activeTab, setActiveTab] = useState<ProfileTab>(getInitialTab);
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const activeTab = parseTab(searchParams.get('tab'));
 
-  useEffect(() => {
-    localStorage.setItem(PROFILE_TAB_KEY, activeTab);
-  }, [activeTab]);
+  const setActiveTab = useCallback(
+    (tab: ProfileTab) => {
+      const params = new URLSearchParams(searchParams.toString());
+      params.set('tab', tab);
+      router.push(`/?${params.toString()}`, { scroll: false });
+    },
+    [router, searchParams],
+  );
 
   const renderContent = () => {
     switch (activeTab) {

@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { CustomerTariffsRepository } from './customer-tariffs.repository';
 import { CustomerTariffDocument } from './schemas/customer-tariff.schema';
 import { TariffService } from '../tariff/tariff.service';
@@ -60,5 +60,31 @@ export class CustomerTariffsService {
       ...data,
       appliedAt: new Date(),
     });
+  }
+
+  /**
+   * Test payment flow: create customer-tariff with expiresAt = now + tariff.activityDurationDays.
+   * Fails if customer already has an active subscription.
+   */
+  async completeTestPayment(
+    customerId: number,
+    tariffId: string,
+  ): Promise<CustomerTariffDocument> {
+    const existing = await this.customerTariffsRepository.findActiveByCustomerId(
+      customerId,
+    );
+    if (existing) {
+      throw new BadRequestException(
+        'У вас уже есть активная подписка. Новый тариф можно оформить после её окончания.',
+      );
+    }
+    const tariff = await this.tariffService.findById(tariffId);
+    if (!tariff) {
+      throw new NotFoundException('Tariff not found');
+    }
+    const days = tariff.activityDurationDays ?? 30;
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + days);
+    return this.applyTariff({ customerId, tariffId, expiresAt });
   }
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { Suspense } from 'react';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import { LoginPage } from '@/components/auth/LoginPage';
 import { ProfilePage } from '@/components/profile/ProfilePage';
@@ -12,7 +12,11 @@ function AppContent() {
     return <LoginPage />;
   }
 
-  return <ProfilePage />;
+  return (
+    <Suspense fallback={null}>
+      <ProfilePage />
+    </Suspense>
+  );
 }
 
 export default function Home() {

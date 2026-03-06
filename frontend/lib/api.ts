@@ -152,6 +152,12 @@ export const subscriptionApi = {
     const response = await api.get('/customer-tariffs/current');
     return response.data;
   },
+
+  /** Test payment: complete card payment and create customer-tariff (expiresAt = now + activityDurationDays). */
+  pay: async (tariffId: string): Promise<{ data: { id: string; tariffId: string; expiresAt: string } }> => {
+    const response = await api.post('/customer-tariffs/pay', { tariffId });
+    return response.data;
+  },
 };
 
 // Verification API

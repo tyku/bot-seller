@@ -31,6 +31,9 @@ export function SubscriptionSection() {
   const [error, setError] = useState<string | null>(null);
   const [confirmTariff, setConfirmTariff] = useState<Tariff | null>(null);
   const [paymentTariff, setPaymentTariff] = useState<Tariff | null>(null);
+  const [showGateway, setShowGateway] = useState(false);
+  const [payLoading, setPayLoading] = useState(false);
+  const [payError, setPayError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -76,9 +79,106 @@ export function SubscriptionSection() {
 
   const handleBackFromPayment = () => {
     setPaymentTariff(null);
+    setShowGateway(false);
+    setPayError(null);
   };
 
-  // Payment step: crypto, card, SBP
+  const handleSelectCard = () => {
+    setShowGateway(true);
+  };
+
+  const handleGatewayBack = () => {
+    setShowGateway(false);
+    setPayError(null);
+  };
+
+  const handlePaySubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!paymentTariff) return;
+    setPayLoading(true);
+    setPayError(null);
+    try {
+      await subscriptionApi.pay(paymentTariff.id);
+      const subRes = await subscriptionApi.getCurrent();
+      setCurrentSubscription(subRes.data ?? null);
+      setPaymentTariff(null);
+      setShowGateway(false);
+    } catch (err) {
+      setPayError(err instanceof Error ? err.message : 'Ошибка оплаты');
+    } finally {
+      setPayLoading(false);
+    }
+  };
+
+  // Test payment gateway (card only)
+  if (paymentTariff && showGateway) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center gap-4">
+          <Button variant="outline" onClick={handleGatewayBack}>
+            ← Назад
+          </Button>
+        </div>
+        <h2 className="text-2xl font-bold text-gray-900">Тестовый платёжный шлюз</h2>
+        <Card className="mb-6">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-xl font-bold text-gray-900">{paymentTariff.name}</h3>
+            <p className="text-2xl font-bold text-blue-600">{paymentTariff.price} ₽</p>
+          </div>
+        </Card>
+        <Card className="max-w-md">
+          <p className="text-sm text-gray-500 mb-4">Введите тестовые данные карты (любые).</p>
+          <form onSubmit={handlePaySubmit} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Номер карты</label>
+              <input
+                type="text"
+                placeholder="4242 4242 4242 4242"
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-gray-900"
+                maxLength={19}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Срок (ММ/ГГ)</label>
+                <input
+                  type="text"
+                  placeholder="12/25"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-gray-900"
+                  maxLength={5}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">CVC</label>
+                <input
+                  type="text"
+                  placeholder="123"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-gray-900"
+                  maxLength={4}
+                />
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Имя на карте</label>
+              <input
+                type="text"
+                placeholder="IVAN IVANOV"
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-gray-900"
+              />
+            </div>
+            {payError && (
+              <p className="text-sm text-red-600">{payError}</p>
+            )}
+            <Button type="submit" variant="primary" className="w-full" disabled={payLoading}>
+              {payLoading ? 'Обработка...' : 'Оплатить'}
+            </Button>
+          </form>
+        </Card>
+      </div>
+    );
+  }
+
+  // Payment step: only card
   if (paymentTariff) {
     return (
       <div className="space-y-6">
@@ -105,34 +205,19 @@ export function SubscriptionSection() {
         </Card>
         <Card>
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Способ оплаты</h3>
-          <div className="grid gap-4 sm:grid-cols-3">
+          <div className="grid gap-4 sm:grid-cols-1 max-w-sm">
             <button
               type="button"
-              className="flex flex-col items-center gap-2 p-6 rounded-xl border-2 border-gray-200 hover:border-blue-500 hover:bg-blue-50/50 transition-all text-left"
-            >
-              <span className="text-3xl">₿</span>
-              <span className="font-semibold text-gray-900">Криптовалюта</span>
-              <span className="text-sm text-gray-500">BTC, USDT и др.</span>
-            </button>
-            <button
-              type="button"
+              onClick={handleSelectCard}
               className="flex flex-col items-center gap-2 p-6 rounded-xl border-2 border-gray-200 hover:border-blue-500 hover:bg-blue-50/50 transition-all text-left"
             >
               <span className="text-3xl">💳</span>
               <span className="font-semibold text-gray-900">Банковская карта</span>
               <span className="text-sm text-gray-500">Visa, Mastercard, МИР</span>
             </button>
-            <button
-              type="button"
-              className="flex flex-col items-center gap-2 p-6 rounded-xl border-2 border-gray-200 hover:border-blue-500 hover:bg-blue-50/50 transition-all text-left"
-            >
-              <span className="text-3xl">📱</span>
-              <span className="font-semibold text-gray-900">СБП</span>
-              <span className="text-sm text-gray-500">Система быстрых платежей</span>
-            </button>
           </div>
           <p className="text-sm text-gray-500 mt-4">
-            Выберите способ оплаты — на следующем шаге откроется платёжная форма.
+            Выберите способ оплаты — откроется тестовый платёжный шлюз.
           </p>
         </Card>
       </div>
@@ -220,12 +305,13 @@ export function SubscriptionSection() {
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
           {tariffs.map((tariff) => {
             const isCurrent = tariff.id === activeTariffId;
+            const isDisabled = isCurrent || hasActiveSubscription;
             return (
               <Card
                 key={tariff.id}
                 className={`relative ${
                   isCurrent ? 'ring-2 ring-blue-500' : ''
-                }`}
+                } ${isDisabled && !isCurrent ? 'opacity-75' : ''}`}
               >
                 <div className="text-center mb-4">
                   <h4 className="text-xl font-bold text-gray-900 mb-1">
@@ -253,10 +339,14 @@ export function SubscriptionSection() {
                 <Button
                   className="w-full"
                   variant={isCurrent ? 'outline' : 'primary'}
-                  disabled={isCurrent}
+                  disabled={isDisabled}
                   onClick={() => handleSelectTariff(tariff)}
                 >
-                  {isCurrent ? 'Текущий тариф' : 'Выбрать'}
+                  {isCurrent
+                    ? 'Текущий тариф'
+                    : hasActiveSubscription
+                      ? 'Доступно после окончания текущего'
+                      : 'Выбрать'}
                 </Button>
               </Card>
             );
@@ -272,7 +362,7 @@ export function SubscriptionSection() {
               Подтверждение выбора
             </h3>
             <p className="text-gray-600 mb-4">
-              Тариф «{confirmTariff.name}» — {confirmTariff.price} ₽. После подтверждения вы перейдёте на страницу оплаты (криптовалюта, карта, СБП).
+              Тариф «{confirmTariff.name}» — {confirmTariff.price} ₽. После подтверждения вы перейдёте к оплате банковской картой (тестовый шлюз).
             </p>
             <div className="flex gap-3 justify-end">
               <Button variant="outline" onClick={() => setConfirmTariff(null)}>
