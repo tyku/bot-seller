@@ -129,6 +129,31 @@ export const customerApi = {
   },
 };
 
+// Tariffs API
+export const tariffsApi = {
+  getAll: async (activeOnly = true): Promise<{ data: import('@/lib/types').Tariff[] }> => {
+    const response = await api.get('/tariffs', {
+      params: { activeOnly: activeOnly ? 'true' : 'false' },
+    });
+    return response.data;
+  },
+
+  getById: async (id: string): Promise<{ data: import('@/lib/types').Tariff | null }> => {
+    const response = await api.get(`/tariffs/${id}`);
+    return response.data;
+  },
+};
+
+// My subscription (active paid tariff)
+export const subscriptionApi = {
+  getCurrent: async (): Promise<{
+    data: import('@/lib/types').ActiveSubscription | null;
+  }> => {
+    const response = await api.get('/customer-tariffs/current');
+    return response.data;
+  },
+};
+
 // Verification API
 export const verificationApi = {
   send: async (data: {

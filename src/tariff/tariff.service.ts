@@ -24,8 +24,12 @@ export class TariffService {
       id: tariff._id.toString(),
       name: tariff.name,
       price: tariff.price,
-      limits: { requests: tariff.limits?.requests ?? 0 },
-      expiresAt: tariff.expiresAt ?? null,
+      limits: {
+        requests: tariff.limits?.requests ?? 0,
+        chats: tariff.limits?.chats ?? 0,
+        bots: tariff.limits?.bots ?? 0,
+      },
+      activityDurationDays: tariff.activityDurationDays ?? null,
       status: tariff.status,
     });
   }

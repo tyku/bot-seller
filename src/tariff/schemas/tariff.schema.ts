@@ -12,6 +12,14 @@ export enum TariffStatus {
 export class TariffLimits {
   @Prop({ required: true, default: 0 })
   requests: number;
+
+  /** Количество активных чатов, которые обслуживаем в рамках тарифа */
+  @Prop({ required: true, default: 0 })
+  chats: number;
+
+  /** Максимум ботов по тарифу; лимиты requests и chats общие на всех ботов */
+  @Prop({ required: true, default: 1 })
+  bots: number;
 }
 
 export const TariffLimitsSchema = SchemaFactory.createForClass(TariffLimits);
@@ -27,8 +35,9 @@ export class Tariff {
   @Prop({ type: TariffLimitsSchema, required: true })
   limits: TariffLimits;
 
-  @Prop()
-  expiresAt: Date;
+  /** Длительность активности тарифа в днях (например 30, 10) */
+  @Prop({ required: false })
+  activityDurationDays: number;
 
   @Prop({ required: true, enum: TariffStatus, default: TariffStatus.ACTIVE })
   status: TariffStatus;
@@ -42,3 +51,4 @@ export class Tariff {
 
 export const TariffSchema = SchemaFactory.createForClass(Tariff);
 TariffSchema.index({ status: 1 });
+TariffSchema.index({ name: 1 });

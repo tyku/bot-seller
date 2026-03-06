@@ -1,4 +1,11 @@
-import { Controller, Get, HttpCode, HttpStatus, Query } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Param,
+  Query,
+} from '@nestjs/common';
 import { TariffService } from './tariff.service';
 import { TariffResponseDto } from './dto/tariff-response.dto';
 
@@ -21,6 +28,23 @@ export class TariffController {
       success: true,
       data,
       message: 'Tariffs retrieved successfully',
+    };
+  }
+
+  @Get(':id')
+  @HttpCode(HttpStatus.OK)
+  async findOne(
+    @Param('id') id: string,
+  ): Promise<{
+    success: boolean;
+    data: TariffResponseDto | null;
+    message: string;
+  }> {
+    const data = await this.tariffService.findById(id);
+    return {
+      success: true,
+      data,
+      message: data ? 'Tariff retrieved' : 'Tariff not found',
     };
   }
 }

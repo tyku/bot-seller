@@ -6,13 +6,17 @@ import {
   CustomerTariff,
   CustomerTariffSchema,
 } from './schemas/customer-tariff.schema';
+import { TariffModule } from '../tariff/tariff.module';
+import { CustomerTariffsController } from './customer-tariffs.controller';
 
 @Module({
   imports: [
     MongooseModule.forFeature([
       { name: CustomerTariff.name, schema: CustomerTariffSchema },
     ]),
+    TariffModule,
   ],
+  controllers: [CustomerTariffsController],
   providers: [CustomerTariffsService, CustomerTariffsRepository],
   exports: [CustomerTariffsService, CustomerTariffsRepository],
 })

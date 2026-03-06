@@ -17,6 +17,24 @@ export class CustomerTariffsRepository {
     return this.customerTariffModel.find({ customerId }).exec();
   }
 
+  /**
+   * Active = not expired: expiresAt is null or expiresAt > now.
+   * Returns the current active subscription (most recent by appliedAt).
+   */
+  async findActiveByCustomerId(
+    customerId: number,
+  ): Promise<CustomerTariffDocument | null> {
+    const now = new Date();
+    return this.customerTariffModel
+      .findOne({
+        customerId,
+        $or: [{ expiresAt: null }, { expiresAt: { $gt: now } }],
+      })
+      .sort({ appliedAt: -1 })
+      .limit(1)
+      .exec();
+  }
+
   async findByCustomerAndTariff(
     customerId: number,
     tariffId: string,
