@@ -57,6 +57,7 @@ export class GatewayService {
       botId,
       update.update_id,
     );
+    
     if (isDuplicate) {
       this.logger.debug(`Duplicate update_id ${update.update_id} for bot ${botId}, skipping`);
       return;
