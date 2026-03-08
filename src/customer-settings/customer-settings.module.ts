@@ -10,12 +10,14 @@ import {
   CustomerSettings,
   CustomerSettingsSchema,
 } from './schemas/customer-settings.schema';
+import { CustomerTariffsModule } from '../customer-tariffs/customer-tariffs.module';
 
 @Module({
   imports: [
     MongooseModule.forFeature([
       { name: CustomerSettings.name, schema: CustomerSettingsSchema },
     ]),
+    CustomerTariffsModule,
   ],
   controllers: [CustomerSettingsController],
   providers: [

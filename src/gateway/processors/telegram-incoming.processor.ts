@@ -8,11 +8,14 @@ import { ConversationPlatform } from '../../conversations/schemas/conversation.s
 import { SourceType } from '../../user/schemas/user.schema';
 import { LlmService } from '../../llm/llm.service';
 import { LlmRateLimitService } from '../../llm/llm-rate-limit.service';
+import { TariffUsageService } from '../../tariff-usage/tariff-usage.service';
 import { TELEGRAM_INCOMING_QUEUE } from '../constants';
 import type {
   TelegramIncomingJob,
   TelegramUpdate,
 } from '../interfaces/telegram-update.interface';
+
+const LIMITS_MESSAGE = 'Лимиты закончились.';
 
 @Processor(TELEGRAM_INCOMING_QUEUE)
 export class TelegramIncomingProcessor extends WorkerHost {
@@ -24,6 +27,7 @@ export class TelegramIncomingProcessor extends WorkerHost {
     private readonly conversationsService: ConversationsService,
     private readonly llmService: LlmService,
     private readonly llmRateLimit: LlmRateLimitService,
+    private readonly tariffUsageService: TariffUsageService,
   ) {
     super();
   }
@@ -35,7 +39,7 @@ export class TelegramIncomingProcessor extends WorkerHost {
       `Processing update ${update.update_id} for bot ${botId} (customer ${customerId})`,
     );
 
-    const chatId = update.message?.chat?.id;
+    const chatId = update.message?.chat?.id ?? update.callback_query?.message?.chat?.id;
     if (!chatId) {
       this.logger.debug(
         `No chat_id in update ${update.update_id}, skipping reply`,
@@ -43,13 +47,48 @@ export class TelegramIncomingProcessor extends WorkerHost {
       return;
     }
 
-    await this.ensureUserOnStart(update, chatId, botId);
-
     const settings = await this.settingsRepository.findById(botId);
     if (!settings) {
       this.logger.warn(`Bot ${botId} not found in DB, cannot reply`);
       return;
     }
+
+    const customerIdNum = Number(customerId);
+    if (!Number.isNaN(customerIdNum)) {
+      const limitCheck =
+        await this.tariffUsageService.checkSubscriptionAndLimits(customerIdNum);
+      if (!limitCheck.allowed) {
+        // TODO: тестовый флоу — при истечении тарифа отправляем в чат сообщение
+        await this.sendReply(
+          settings.token,
+          chatId,
+          LIMITS_MESSAGE,
+          botId,
+        );
+        return;
+      }
+
+      const isStartCommand = /^\/start(\s|@|$)/i.test(
+        (update.message?.text ?? update.callback_query?.data ?? '').trim(),
+      );
+      if (isStartCommand) {
+        const chatResult = await this.tariffUsageService.tryConsumeChat(
+          customerIdNum,
+          String(chatId),
+        );
+        if (!chatResult.allowed) {
+          await this.sendReply(
+            settings.token,
+            chatId,
+            LIMITS_MESSAGE,
+            botId,
+          );
+          return;
+        }
+      }
+    }
+
+    await this.ensureUserOnStart(update, chatId, botId);
 
     const userText =
       update.message?.text ?? update.callback_query?.data ?? '';
@@ -63,6 +102,20 @@ export class TelegramIncomingProcessor extends WorkerHost {
     const hasContext = userText.trim() !== '' || messages.length > 0;
 
     if (hasContext) {
+      if (!Number.isNaN(customerIdNum)) {
+        const requestResult =
+          await this.tariffUsageService.tryConsumeRequest(customerIdNum);
+        if (!requestResult.allowed) {
+          await this.sendReply(
+            settings.token,
+            chatId,
+            LIMITS_MESSAGE,
+            botId,
+          );
+          return;
+        }
+      }
+
       const rateLimit = await this.llmRateLimit.checkAndConsume(botId);
       if (!rateLimit.allowed) {
         await this.sendReply(
@@ -82,6 +135,14 @@ export class TelegramIncomingProcessor extends WorkerHost {
     );
     await this.saveAssistantReply(chatId, botId, text);
     await this.sendReply(settings.token, chatId, text, botId);
+
+    if (!Number.isNaN(customerIdNum)) {
+      await this.tariffUsageService
+        .checkAndSend75Notification(customerIdNum)
+        .catch((err) =>
+          this.logger.warn(`75% notification check failed: ${err?.message}`),
+        );
+    }
   }
 
   private async ensureUserOnStart(

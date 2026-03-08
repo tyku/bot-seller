@@ -10,7 +10,6 @@ import { Queue } from 'bullmq';
 import { BotCacheService } from '../customer-settings/services/bot-cache.service';
 import { BotType } from '../customer-settings/schemas/customer-settings.schema';
 import { DeduplicationService } from './services/deduplication.service';
-import { SubscriptionService } from './services/subscription.service';
 import { TELEGRAM_INCOMING_QUEUE } from './constants';
 import type { TelegramUpdate, TelegramIncomingJob } from './interfaces/telegram-update.interface';
 
@@ -21,7 +20,6 @@ export class GatewayService {
   constructor(
     private readonly botCacheService: BotCacheService,
     private readonly deduplicationService: DeduplicationService,
-    private readonly subscriptionService: SubscriptionService,
     @InjectQueue(TELEGRAM_INCOMING_QUEUE) private readonly telegramQueue: Queue,
   ) {}
 
@@ -49,13 +47,7 @@ export class GatewayService {
       throw new ForbiddenException('Invalid secret token');
     }
 
-    const isActive = await this.subscriptionService.isSubscriptionActive(
-      bot.customerId,
-    );
-    if (!isActive) {
-      this.logger.warn(`Subscription inactive for customer ${bot.customerId}`);
-      throw new ForbiddenException('Subscription inactive');
-    }
+    // Проверка подписки и лимитов выполняется в процессоре — чтобы отправить в чат "Лимиты закончились"
 
     if (!update.update_id) {
       throw new BadRequestException('Invalid update: missing update_id');

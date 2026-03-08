@@ -15,6 +15,7 @@ import { ConversationsModule } from './conversations/conversations.module';
 import { LlmModule } from './llm/llm.module';
 import { TariffModule } from './tariff/tariff.module';
 import { CustomerTariffsModule } from './customer-tariffs/customer-tariffs.module';
+import { TariffUsageModule } from './tariff-usage/tariff-usage.module';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import configuration from './config/configuration';
 import { validate } from './config/env.validation';
@@ -56,6 +57,7 @@ import { validate } from './config/env.validation';
     LlmModule,
     TariffModule,
     CustomerTariffsModule,
+    TariffUsageModule,
   ],
   controllers: [],
   providers: [

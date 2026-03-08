@@ -270,6 +270,18 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     await this.sessionModel.deleteOne({ sessionId });
   }
 
+  /**
+   * Отправка сообщения пользователю в Telegram (канал верификации — тот же бот, что и для кода).
+   * Используется для уведомлений о лимитах (например, 75%).
+   */
+  async sendMessageToUser(telegramId: number, text: string): Promise<void> {
+    if (!this.bot) {
+      this.logger.warn('Telegram bot not configured, cannot send message to user');
+      return;
+    }
+    await this.bot.telegram.sendMessage(telegramId, text, { parse_mode: 'HTML' });
+  }
+
   // ─────────────────────── Cleanup ───────────────────────
 
   private cleanupExpiredCodes(): void {

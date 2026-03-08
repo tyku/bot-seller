@@ -15,6 +15,7 @@ import {
 import { WebhookSecretService } from './services/webhook-secret.service';
 import { BotCacheService } from './services/bot-cache.service';
 import { TelegramWebhookService } from './services/telegram-webhook.service';
+import { CustomerTariffsService } from '../customer-tariffs/customer-tariffs.service';
 
 @Injectable()
 export class CustomerSettingsService {
@@ -25,12 +26,33 @@ export class CustomerSettingsService {
     private readonly webhookSecretService: WebhookSecretService,
     private readonly botCacheService: BotCacheService,
     private readonly telegramWebhookService: TelegramWebhookService,
+    private readonly customerTariffsService: CustomerTariffsService,
   ) {}
 
   async create(
     createCustomerSettingsDto: CreateCustomerSettingsDto,
   ): Promise<ResponseCustomerSettingsDto> {
     this.logger.log(`Creating customer settings for customer: ${createCustomerSettingsDto.customerId}`);
+
+    const customerIdNum = Number(createCustomerSettingsDto.customerId);
+    if (!Number.isNaN(customerIdNum)) {
+      const subscription =
+        await this.customerTariffsService.getActiveSubscription(customerIdNum);
+      if (!subscription) {
+        throw new BadRequestException(
+          'Нет активной подписки. Оформите тариф для создания бота.',
+        );
+      }
+      const existingBots =
+        await this.customerSettingsRepository.findByCustomerId(
+          createCustomerSettingsDto.customerId,
+        );
+      if (existingBots.length >= subscription.tariff.limits.bots) {
+        throw new BadRequestException(
+          `Достигнут лимит ботов по тарифу (${subscription.tariff.limits.bots}). Увеличьте тариф или купите доп. пакет.`,
+        );
+      }
+    }
 
     try {
       let webhookSecret: string | undefined;

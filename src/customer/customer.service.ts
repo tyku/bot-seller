@@ -141,6 +141,12 @@ export class CustomerService {
     return this.customerRepository.findByTelegramId(telegramId);
   }
 
+  async findByCustomerId(
+    customerId: number,
+  ): Promise<CustomerDocument | null> {
+    return this.customerRepository.findByCustomerId(customerId);
+  }
+
   private mapToResponseDto(customer: CustomerDocument): ResponseCustomerDto {
     return new ResponseCustomerDto({
       id: customer._id.toString(),
