@@ -6,12 +6,13 @@ import {
 } from '../customer-tariffs/customer-tariffs.service';
 import { CustomerService } from '../customer/customer.service';
 import { TelegramService } from '../telegram/telegram.service';
+import { CustomerSettingsRepository } from '../customer-settings/customer-settings.repository';
 
 export interface LimitCheckResult {
   allowed: boolean;
   reason?: string;
   subscription: ActiveSubscriptionDto | null;
-  usage: { chatsUsed: number; requestsUsed: number };
+  usage: { chatsUsed: number; requestsUsed: number; botsUsed: number };
 }
 
 @Injectable()
@@ -23,44 +24,57 @@ export class TariffUsageService {
     private readonly customerTariffsService: CustomerTariffsService,
     private readonly customerService: CustomerService,
     private readonly telegramService: TelegramService,
+    private readonly customerSettingsRepository: CustomerSettingsRepository,
   ) {}
 
   /**
    * Проверяет, активна ли подписка и есть ли лимиты. Не потребляет лимит.
+   * Учитываются все лимиты тарифа: chats, requests, bots.
    */
   async checkSubscriptionAndLimits(
     customerId: number,
   ): Promise<LimitCheckResult> {
     const subscription =
       await this.customerTariffsService.getActiveSubscription(customerId);
-    const usage = await this.usageRepository.getUsage(customerId);
+    const tariffId = subscription?.tariffId ?? undefined;
+    const usageDoc = await this.usageRepository.getUsage(customerId, tariffId);
+    const botsUsed =
+      await this.customerSettingsRepository.countNonArchivedByCustomerId(
+        String(customerId),
+      );
+    const usage = {
+      chatsUsed: usageDoc.chatsUsed,
+      requestsUsed: usageDoc.requestsUsed,
+      botsUsed,
+    };
 
     if (!subscription) {
       return {
         allowed: false,
         reason: 'subscription_inactive',
         subscription: null,
-        usage: { chatsUsed: usage.chatsUsed, requestsUsed: usage.requestsUsed },
+        usage,
       };
     }
 
     const { limits } = subscription.tariff;
     const chatsOk = usage.chatsUsed < limits.chats;
     const requestsOk = usage.requestsUsed < limits.requests;
+    const botsOk = limits.bots === 0 || usage.botsUsed < limits.bots;
 
-    if (!chatsOk || !requestsOk) {
+    if (!chatsOk || !requestsOk || !botsOk) {
       return {
         allowed: false,
         reason: 'limits_exceeded',
         subscription,
-        usage: { chatsUsed: usage.chatsUsed, requestsUsed: usage.requestsUsed },
+        usage,
       };
     }
 
     return {
       allowed: true,
       subscription,
-      usage: { chatsUsed: usage.chatsUsed, requestsUsed: usage.requestsUsed },
+      usage,
     };
   }
 
@@ -106,12 +120,18 @@ export class TariffUsageService {
       return { allowed: false, reason: 'subscription_inactive' };
     }
 
-    const usage = await this.usageRepository.getUsage(customerId);
+    const usage = await this.usageRepository.getUsage(
+      customerId,
+      subscription.tariffId,
+    );
     if (usage.requestsUsed >= subscription.tariff.limits.requests) {
       return { allowed: false, reason: 'requests_limit_exceeded' };
     }
 
-    await this.usageRepository.incrementRequests(customerId);
+    await this.usageRepository.incrementRequests(
+      customerId,
+      subscription.tariffId,
+    );
     return { allowed: true };
   }
 
@@ -123,8 +143,15 @@ export class TariffUsageService {
       await this.customerTariffsService.getActiveSubscription(customerId);
     if (!subscription) return;
 
-    const usage = await this.usageRepository.getUsage(customerId);
+    const usage = await this.usageRepository.getUsage(
+      customerId,
+      subscription.tariffId,
+    );
     const { limits } = subscription.tariff;
+    const botsUsed =
+      await this.customerSettingsRepository.countNonArchivedByCustomerId(
+        String(customerId),
+      );
 
     const chatsPercent =
       limits.chats > 0 ? (usage.chatsUsed / limits.chats) * 100 : 0;
@@ -132,12 +159,20 @@ export class TariffUsageService {
       limits.requests > 0
         ? (usage.requestsUsed / limits.requests) * 100
         : 0;
-    const at75 = chatsPercent >= 75 || requestsPercent >= 75;
+    const botsPercent =
+      limits.bots > 0 ? (botsUsed / limits.bots) * 100 : 0;
+    const at75 =
+      chatsPercent >= 75 ||
+      requestsPercent >= 75 ||
+      botsPercent >= 75;
     if (!at75) return;
 
     if (usage.last75NotificationSentAt) return;
 
-    await this.usageRepository.set75NotificationSent(customerId);
+    await this.usageRepository.set75NotificationSent(
+      customerId,
+      subscription.tariffId,
+    );
 
     const customer = await this.customerService.findByCustomerId(customerId);
     if (!customer?.telegramId) {
@@ -147,12 +182,18 @@ export class TariffUsageService {
       return;
     }
 
-    const text = [
+    const lines = [
       '⚠️ Лимиты в оплаченном тарифе заканчиваются, вы можете увеличить их, купив доп. пакеты.',
       '',
       `Чаты: использовано ${usage.chatsUsed} из ${limits.chats}, осталось ${Math.max(0, limits.chats - usage.chatsUsed)}.`,
       `Запросы: использовано ${usage.requestsUsed} из ${limits.requests}, осталось ${Math.max(0, limits.requests - usage.requestsUsed)}.`,
-    ].join('\n');
+    ];
+    if (limits.bots > 0) {
+      lines.push(
+        `Боты: использовано ${botsUsed} из ${limits.bots}, осталось ${Math.max(0, limits.bots - botsUsed)}.`,
+      );
+    }
+    const text = lines.join('\n');
 
     try {
       await this.telegramService.sendMessageToUser(customer.telegramId, text);
@@ -164,12 +205,24 @@ export class TariffUsageService {
     }
   }
 
-  /** Количество ботов не храним здесь — считаем по CustomerSettings. Используется при создании бота. */
+  /** Использование по всем лимитам (чаты, запросы, боты) для отображения. Боты считаются по CustomerSettings (без архива). */
   async getUsageForDisplay(customerId: number): Promise<{
     chatsUsed: number;
     requestsUsed: number;
+    botsUsed: number;
   }> {
-    const u = await this.usageRepository.getUsage(customerId);
-    return { chatsUsed: u.chatsUsed, requestsUsed: u.requestsUsed };
+    const subscription =
+      await this.customerTariffsService.getActiveSubscription(customerId);
+    const tariffId = subscription?.tariffId ?? undefined;
+    const u = await this.usageRepository.getUsage(customerId, tariffId);
+    const botsUsed =
+      await this.customerSettingsRepository.countNonArchivedByCustomerId(
+        String(customerId),
+      );
+    return {
+      chatsUsed: u.chatsUsed,
+      requestsUsed: u.requestsUsed,
+      botsUsed,
+    };
   }
 }

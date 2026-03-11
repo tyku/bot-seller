@@ -160,6 +160,16 @@ export const subscriptionApi = {
   },
 };
 
+// Tariff usage (how much of limits is used)
+export const usageApi = {
+  getMe: async (): Promise<{
+    data: { chatsUsed: number; requestsUsed: number; botsUsed: number };
+  }> => {
+    const response = await api.get('/tariff-usage/me');
+    return response.data;
+  },
+};
+
 // Verification API
 export const verificationApi = {
   send: async (data: {

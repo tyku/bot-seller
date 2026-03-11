@@ -8,7 +8,7 @@ import { z } from 'zod';
 import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
-import { settingsApi, customerApi } from '@/lib/api';
+import { settingsApi, customerApi, usageApi, subscriptionApi } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
 import { getErrorMessage } from '@/lib/error-utils';
 import { BotSettings, BotStatusType } from '@/lib/types';
@@ -48,6 +48,8 @@ export function BotsSection() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [bots, setBots] = useState<BotSettings[]>([]);
+  const [usage, setUsage] = useState<{ chatsUsed: number; requestsUsed: number; botsUsed: number } | null>(null);
+  const [limits, setLimits] = useState<{ bots: number; chats: number; requests: number } | null>(null);
   const [isLoadingBots, setIsLoadingBots] = useState(true);
   const [error, setError] = useState('');
   const [actionError, setActionError] = useState('');
@@ -88,8 +90,14 @@ export function BotsSection() {
           setUser(currentUser);
         }
         if (currentUser) {
-          const response = await settingsApi.getAll(currentUser.customerId.toString());
-          setBots(response.data || []);
+          const [botsRes, subRes, usageRes] = await Promise.all([
+            settingsApi.getAll(currentUser.customerId.toString()),
+            subscriptionApi.getCurrent().catch(() => ({ data: null })),
+            usageApi.getMe().catch((): { data: { chatsUsed: number; requestsUsed: number; botsUsed: number } | null } => ({ data: null })),
+          ]);
+          setBots(botsRes.data || []);
+          setUsage(usageRes.data ?? null);
+          setLimits(subRes.data?.tariff ? { bots: subRes.data.tariff.limits.bots, chats: subRes.data.tariff.limits.chats, requests: subRes.data.tariff.limits.requests } : null);
         }
       } catch (err) {
         console.error('Failed to load bots:', err);
@@ -223,6 +231,27 @@ export function BotsSection() {
         <div>
           <h2 className="text-2xl font-bold text-gray-900">Мои боты</h2>
           <p className="text-gray-600 mt-1">Управляйте вашими ботами</p>
+          {usage && limits && (limits.bots > 0 || limits.chats > 0 || limits.requests > 0) && (() => {
+            const at75 =
+              (limits.requests > 0 && usage.requestsUsed / limits.requests >= 0.75) ||
+              (limits.chats > 0 && usage.chatsUsed / limits.chats >= 0.75);
+            return (
+              <p
+                className={`text-sm mt-2 inline-block px-3 py-1.5 rounded-lg border font-medium ${
+                  at75
+                    ? 'bg-red-100 text-red-800 border-red-300 ring-1 ring-red-200'
+                    : 'bg-blue-100 text-blue-800 border border-blue-200'
+                }`}
+              >
+                {at75 && '⚠️ '}
+                Использовано: {limits.bots > 0 && <span>ботов {usage.botsUsed}/{limits.bots}</span>}
+                {limits.bots > 0 && (limits.chats > 0 || limits.requests > 0) && ' · '}
+                {limits.chats > 0 && <span>чатов {usage.chatsUsed}/{limits.chats}</span>}
+                {(limits.bots > 0 || limits.chats > 0) && limits.requests > 0 && ' · '}
+                {limits.requests > 0 && <span>запросов {usage.requestsUsed.toLocaleString()}/{limits.requests.toLocaleString()}</span>}
+              </p>
+            );
+          })()}
         </div>
         {!isFormOpen && (
           <Button onClick={openCreateForm}>
@@ -233,6 +262,16 @@ export function BotsSection() {
 
       {isFormOpen && (
         <Card>
+          <div className="flex items-center gap-3 mb-4">
+            <button
+              type="button"
+              onClick={closeForm}
+              className="flex items-center gap-1.5 text-gray-600 hover:text-gray-900 font-medium transition-colors"
+            >
+              <span aria-hidden>←</span>
+              <span>К списку ботов</span>
+            </button>
+          </div>
           <h3 className="text-lg font-semibold text-gray-900 mb-4">
             {formMode === 'edit' ? 'Редактирование бота' : 'Новый бот'}
           </h3>

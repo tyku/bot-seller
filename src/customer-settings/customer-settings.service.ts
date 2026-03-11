@@ -43,11 +43,11 @@ export class CustomerSettingsService {
           'Нет активной подписки. Оформите тариф для создания бота.',
         );
       }
-      const existingBots =
-        await this.customerSettingsRepository.findByCustomerId(
+      const existingBotsCount =
+        await this.customerSettingsRepository.countNonArchivedByCustomerId(
           createCustomerSettingsDto.customerId,
         );
-      if (existingBots.length >= subscription.tariff.limits.bots) {
+      if (existingBotsCount >= subscription.tariff.limits.bots) {
         throw new BadRequestException(
           `Достигнут лимит ботов по тарифу (${subscription.tariff.limits.bots}). Увеличьте тариф или купите доп. пакет.`,
         );

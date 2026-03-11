@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, OnModuleInit } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { TariffUsage, TariffUsageDocument } from './schemas/tariff-usage.schema';
@@ -8,7 +8,7 @@ import {
 } from './schemas/customer-chat.schema';
 
 @Injectable()
-export class TariffUsageRepository {
+export class TariffUsageRepository implements OnModuleInit {
   constructor(
     @InjectModel(TariffUsage.name)
     private tariffUsageModel: Model<TariffUsageDocument>,
@@ -16,10 +16,37 @@ export class TariffUsageRepository {
     private customerChatModel: Model<CustomerChatDocument>,
   ) {}
 
-  async getOrCreateUsage(customerId: number): Promise<TariffUsageDocument> {
-    let doc = await this.tariffUsageModel.findOne({ customerId }).exec();
+  async onModuleInit(): Promise<void> {
+    // Удаляем старый уникальный индекс customerId_1 (остался от схемы до введения tariffId).
+    // Без этого при создании второй записи на одного customerId (другой tariffId) падаем с E11000.
+    try {
+      await this.tariffUsageModel.collection.dropIndex('customerId_1');
+    } catch {
+      // Индекс уже удалён или не существовал — игнорируем
+    }
+  }
+
+  /**
+   * @param tariffId — привязка к тарифу подписки; для старых записей можно не передавать
+   */
+  async getOrCreateUsage(
+    customerId: number,
+    tariffId?: string | null,
+  ): Promise<TariffUsageDocument> {
+    const filter =
+      tariffId !== undefined
+        ? { customerId, tariffId: tariffId ?? null }
+        : {
+            customerId,
+            $or: [{ tariffId: null }, { tariffId: { $exists: false } }],
+          };
+    let doc = await this.tariffUsageModel.findOne(filter).exec();
     if (!doc) {
-      doc = await this.tariffUsageModel.create({ customerId, requestsUsed: 0 });
+      doc = await this.tariffUsageModel.create({
+        customerId,
+        tariffId: tariffId ?? null,
+        requestsUsed: 0,
+      });
     }
     return doc;
   }
@@ -50,33 +77,54 @@ export class TariffUsageRepository {
     }
   }
 
-  async incrementRequests(customerId: number): Promise<void> {
+  async incrementRequests(
+    customerId: number,
+    tariffId?: string | null,
+  ): Promise<void> {
+    const filter =
+      tariffId !== undefined
+        ? { customerId, tariffId: tariffId ?? null }
+        : {
+            customerId,
+            $or: [{ tariffId: null }, { tariffId: { $exists: false } }],
+          };
     await this.tariffUsageModel
-      .findOneAndUpdate(
-        { customerId },
-        { $inc: { requestsUsed: 1 } },
-        { new: true, upsert: true },
-      )
+      .findOneAndUpdate(filter, {
+        $inc: { requestsUsed: 1 },
+        $setOnInsert: { customerId, tariffId: tariffId ?? null },
+      }, { new: true, upsert: true })
       .exec();
   }
 
-  async set75NotificationSent(customerId: number): Promise<void> {
+  async set75NotificationSent(
+    customerId: number,
+    tariffId?: string | null,
+  ): Promise<void> {
+    const filter =
+      tariffId !== undefined
+        ? { customerId, tariffId: tariffId ?? null }
+        : {
+            customerId,
+            $or: [{ tariffId: null }, { tariffId: { $exists: false } }],
+          };
     await this.tariffUsageModel
-      .findOneAndUpdate(
-        { customerId },
-        { last75NotificationSentAt: new Date() },
-        { new: true, upsert: true },
-      )
+      .findOneAndUpdate(filter, {
+        $set: { last75NotificationSentAt: new Date() },
+        $setOnInsert: { customerId, tariffId: tariffId ?? null },
+      }, { new: true, upsert: true })
       .exec();
   }
 
-  async getUsage(customerId: number): Promise<{
+  async getUsage(
+    customerId: number,
+    tariffId?: string | null,
+  ): Promise<{
     requestsUsed: number;
     chatsUsed: number;
     last75NotificationSentAt: Date | null;
   }> {
     const [usage, chatsUsed] = await Promise.all([
-      this.getOrCreateUsage(customerId),
+      this.getOrCreateUsage(customerId, tariffId),
       this.getChatsCount(customerId),
     ]);
     return {

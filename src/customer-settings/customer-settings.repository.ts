@@ -7,6 +7,8 @@ import {
   BotStatus,
   BotType,
 } from './schemas/customer-settings.schema';
+
+// BotStatus used in countNonArchivedByCustomerId
 import type { CreateCustomerSettingsDto } from './dto/create-customer-settings.dto';
 
 @Injectable()
@@ -27,6 +29,16 @@ export class CustomerSettingsRepository {
     customerId: string,
   ): Promise<CustomerSettingsDocument[]> {
     return this.customerSettingsModel.find({ customerId }).exec();
+  }
+
+  /** Количество ботов без архива (учитываются в лимите тарифа) */
+  async countNonArchivedByCustomerId(customerId: string): Promise<number> {
+    return this.customerSettingsModel
+      .countDocuments({
+        customerId,
+        status: { $ne: BotStatus.ARCHIVED },
+      })
+      .exec();
   }
 
   async findById(id: string): Promise<CustomerSettingsDocument | null> {

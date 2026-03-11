@@ -5,8 +5,12 @@ export type TariffUsageDocument = TariffUsage & Document;
 
 @Schema({ timestamps: true })
 export class TariffUsage {
-  @Prop({ required: true, type: Number, unique: true, index: true })
+  @Prop({ required: true, type: Number, index: true })
   customerId: number;
+
+  /** Связь с конкретным тарифом — использование привязано к тарифу подписки (опционально для старых записей) */
+  @Prop({ required: false, type: String, index: true, default: null })
+  tariffId: string | null;
 
   @Prop({ required: true, default: 0 })
   requestsUsed: number;
@@ -23,4 +27,5 @@ export class TariffUsage {
 }
 
 export const TariffUsageSchema = SchemaFactory.createForClass(TariffUsage);
+TariffUsageSchema.index({ customerId: 1, tariffId: 1 }, { unique: true });
 TariffUsageSchema.index({ customerId: 1 });

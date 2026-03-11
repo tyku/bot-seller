@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
-import { tariffsApi, subscriptionApi } from '@/lib/api';
+import { tariffsApi, subscriptionApi, usageApi } from '@/lib/api';
 import type { Tariff, ActiveSubscription } from '@/lib/types';
 
 function formatDate(s: string | null): string {
@@ -23,10 +23,13 @@ function formatDuration(days: number | null): string {
   return `${days} дней`;
 }
 
+export type Usage = { chatsUsed: number; requestsUsed: number; botsUsed: number };
+
 export function SubscriptionSection() {
   const [tariffs, setTariffs] = useState<Tariff[]>([]);
   const [currentSubscription, setCurrentSubscription] =
     useState<ActiveSubscription | null>(null);
+  const [usage, setUsage] = useState<Usage | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [confirmTariff, setConfirmTariff] = useState<Tariff | null>(null);
@@ -41,13 +44,15 @@ export function SubscriptionSection() {
       setLoading(true);
       setError(null);
       try {
-        const [tariffsRes, subRes] = await Promise.all([
+        const [tariffsRes, subRes, usageRes] = await Promise.all([
           tariffsApi.getAll(true),
           subscriptionApi.getCurrent(),
+          usageApi.getMe().catch((): { data: Usage | null } => ({ data: null })),
         ]);
         if (!cancelled) {
           setTariffs(tariffsRes.data ?? []);
           setCurrentSubscription(subRes.data ?? null);
+          setUsage(usageRes.data ?? null);
         }
       } catch (e) {
         if (!cancelled) {
@@ -292,6 +297,30 @@ export function SubscriptionSection() {
                 <li>• Действует до: {formatDate(currentSubscription.expiresAt)}</li>
               )}
             </ul>
+            {usage && (() => {
+              const lim = currentSubscription.tariff.limits;
+              const at75 =
+                (lim.requests > 0 && usage.requestsUsed / lim.requests >= 0.75) ||
+                (lim.chats > 0 && usage.chatsUsed / lim.chats >= 0.75);
+              return (
+                <div
+                  className={`mt-4 p-4 rounded-xl border-2 shadow-sm ${
+                    at75
+                      ? 'bg-red-50 border-red-300 ring-2 ring-red-200/50'
+                      : 'bg-blue-50 border-blue-200'
+                  }`}
+                >
+                  <p className={`text-sm font-semibold mb-2 ${at75 ? 'text-red-900' : 'text-blue-900'}`}>
+                    {at75 ? '⚠️ Лимиты заканчиваются (≥75%)' : 'Использовано'}
+                  </p>
+                  <ul className={`space-y-1 text-sm ${at75 ? 'text-red-800' : 'text-blue-800'}`}>
+                    <li>• Запросы: {usage.requestsUsed.toLocaleString()}{lim.requests > 0 ? ` из ${lim.requests.toLocaleString()}` : ''}</li>
+                    <li>• Чаты: {usage.chatsUsed.toLocaleString()}{lim.chats > 0 ? ` из ${lim.chats.toLocaleString()}` : ''}</li>
+                    <li>• Боты: {usage.botsUsed}{lim.bots > 0 ? ` из ${lim.bots}` : ''}</li>
+                  </ul>
+                </div>
+              );
+            })()}
           </div>
           <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-3 mt-4">
             После оплаты тариф изменить нельзя. Новый тариф можно оформить только после окончания текущего.
