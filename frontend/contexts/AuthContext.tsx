@@ -31,6 +31,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setIsHydrated(true);
   }, []);
 
+  // При 401 с любого API — считаем сессию протухшей, выходим и показываем экран авторизации
+  useEffect(() => {
+    const handler = () => {
+      localStorage.removeItem('token');
+      localStorage.removeItem('authUser');
+      localStorage.removeItem('wizardState');
+      setUser(null);
+      setIsAuthenticated(false);
+    };
+    window.addEventListener('auth:session-expired', handler);
+    return () => window.removeEventListener('auth:session-expired', handler);
+  }, []);
+
   useEffect(() => {
     if (!isHydrated) return;
     if (user) {

@@ -1,19 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { TariffUsageRepository } from './tariff-usage.repository';
-import {
-  CustomerTariffsService,
-  ActiveSubscriptionDto,
-} from '../customer-tariffs/customer-tariffs.service';
+import { CustomerTariffsService } from '../customer-tariffs/customer-tariffs.service';
 import { CustomerService } from '../customer/customer.service';
 import { TelegramService } from '../telegram/telegram.service';
 import { CustomerSettingsRepository } from '../customer-settings/customer-settings.repository';
-
-export interface LimitCheckResult {
-  allowed: boolean;
-  reason?: string;
-  subscription: ActiveSubscriptionDto | null;
-  usage: { chatsUsed: number; requestsUsed: number; botsUsed: number };
-}
 
 @Injectable()
 export class TariffUsageService {
@@ -26,57 +16,6 @@ export class TariffUsageService {
     private readonly telegramService: TelegramService,
     private readonly customerSettingsRepository: CustomerSettingsRepository,
   ) {}
-
-  /**
-   * Проверяет, активна ли подписка и есть ли лимиты. Не потребляет лимит.
-   * Учитываются все лимиты тарифа: chats, requests, bots.
-   */
-  async checkSubscriptionAndLimits(
-    customerId: number,
-  ): Promise<LimitCheckResult> {
-    const subscription =
-      await this.customerTariffsService.getActiveSubscription(customerId);
-    const tariffId = subscription?.tariffId ?? undefined;
-    const usageDoc = await this.usageRepository.getUsage(customerId, tariffId);
-    const botsUsed =
-      await this.customerSettingsRepository.countNonArchivedByCustomerId(
-        String(customerId),
-      );
-    const usage = {
-      chatsUsed: usageDoc.chatsUsed,
-      requestsUsed: usageDoc.requestsUsed,
-      botsUsed,
-    };
-
-    if (!subscription) {
-      return {
-        allowed: false,
-        reason: 'subscription_inactive',
-        subscription: null,
-        usage,
-      };
-    }
-
-    const { limits } = subscription.tariff;
-    const chatsOk = usage.chatsUsed < limits.chats;
-    const requestsOk = usage.requestsUsed < limits.requests;
-    const botsOk = limits.bots === 0 || usage.botsUsed < limits.bots;
-
-    if (!chatsOk || !requestsOk || !botsOk) {
-      return {
-        allowed: false,
-        reason: 'limits_exceeded',
-        subscription,
-        usage,
-      };
-    }
-
-    return {
-      allowed: true,
-      subscription,
-      usage,
-    };
-  }
 
   /**
    * Для /start: новый чат — проверяем лимит chats и при успехе добавляем чат.
@@ -132,6 +71,30 @@ export class TariffUsageService {
       customerId,
       subscription.tariffId,
     );
+    return { allowed: true };
+  }
+
+  /**
+   * При создании нового бота: проверяем лимит bots. Не потребляет — бот создаётся в CustomerSettings.
+   */
+  async tryConsumeBot(customerId: number): Promise<{
+    allowed: boolean;
+    reason?: string;
+  }> {
+    const subscription =
+      await this.customerTariffsService.getActiveSubscription(customerId);
+    if (!subscription) {
+      return { allowed: false, reason: 'subscription_inactive' };
+    }
+    const { limits } = subscription.tariff;
+    if (limits.bots === 0) return { allowed: true };
+    const botsUsed =
+      await this.customerSettingsRepository.countNonArchivedByCustomerId(
+        String(customerId),
+      );
+    if (botsUsed >= limits.bots) {
+      return { allowed: false, reason: 'bots_limit_exceeded' };
+    }
     return { allowed: true };
   }
 

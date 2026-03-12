@@ -54,11 +54,15 @@ export class TelegramIncomingProcessor extends WorkerHost {
     }
 
     const customerIdNum = Number(customerId);
-    if (!Number.isNaN(customerIdNum)) {
-      const limitCheck =
-        await this.tariffUsageService.checkSubscriptionAndLimits(customerIdNum);
-      if (!limitCheck.allowed) {
-        // TODO: тестовый флоу — при истечении тарифа отправляем в чат сообщение
+    const isStartCommand = /^\/start(\s|@|$)/i.test(
+      (update.message?.text ?? update.callback_query?.data ?? '').trim(),
+    );
+    if (!Number.isNaN(customerIdNum) && isStartCommand) {
+      const chatResult = await this.tariffUsageService.tryConsumeChat(
+        customerIdNum,
+        String(chatId),
+      );
+      if (!chatResult.allowed) {
         await this.sendReply(
           settings.token,
           chatId,
@@ -66,25 +70,6 @@ export class TelegramIncomingProcessor extends WorkerHost {
           botId,
         );
         return;
-      }
-
-      const isStartCommand = /^\/start(\s|@|$)/i.test(
-        (update.message?.text ?? update.callback_query?.data ?? '').trim(),
-      );
-      if (isStartCommand) {
-        const chatResult = await this.tariffUsageService.tryConsumeChat(
-          customerIdNum,
-          String(chatId),
-        );
-        if (!chatResult.allowed) {
-          await this.sendReply(
-            settings.token,
-            chatId,
-            LIMITS_MESSAGE,
-            botId,
-          );
-          return;
-        }
       }
     }
 

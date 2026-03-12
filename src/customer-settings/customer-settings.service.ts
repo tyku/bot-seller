@@ -15,7 +15,7 @@ import {
 import { WebhookSecretService } from './services/webhook-secret.service';
 import { BotCacheService } from './services/bot-cache.service';
 import { TelegramWebhookService } from './services/telegram-webhook.service';
-import { CustomerTariffsService } from '../customer-tariffs/customer-tariffs.service';
+import { TariffUsageService } from '../tariff-usage/tariff-usage.service';
 
 @Injectable()
 export class CustomerSettingsService {
@@ -26,7 +26,7 @@ export class CustomerSettingsService {
     private readonly webhookSecretService: WebhookSecretService,
     private readonly botCacheService: BotCacheService,
     private readonly telegramWebhookService: TelegramWebhookService,
-    private readonly customerTariffsService: CustomerTariffsService,
+    private readonly tariffUsageService: TariffUsageService,
   ) {}
 
   async create(
@@ -36,21 +36,14 @@ export class CustomerSettingsService {
 
     const customerIdNum = Number(createCustomerSettingsDto.customerId);
     if (!Number.isNaN(customerIdNum)) {
-      const subscription =
-        await this.customerTariffsService.getActiveSubscription(customerIdNum);
-      if (!subscription) {
-        throw new BadRequestException(
-          'Нет активной подписки. Оформите тариф для создания бота.',
-        );
-      }
-      const existingBotsCount =
-        await this.customerSettingsRepository.countNonArchivedByCustomerId(
-          createCustomerSettingsDto.customerId,
-        );
-      if (existingBotsCount >= subscription.tariff.limits.bots) {
-        throw new BadRequestException(
-          `Достигнут лимит ботов по тарифу (${subscription.tariff.limits.bots}). Увеличьте тариф или купите доп. пакет.`,
-        );
+      const botResult =
+        await this.tariffUsageService.tryConsumeBot(customerIdNum);
+      if (!botResult.allowed) {
+        const message =
+          botResult.reason === 'subscription_inactive'
+            ? 'Нет активной подписки. Оформите тариф для создания бота.'
+            : 'Достигнут лимит ботов по тарифу. Увеличьте тариф или купите доп. пакет.';
+        throw new BadRequestException(message);
       }
     }
 

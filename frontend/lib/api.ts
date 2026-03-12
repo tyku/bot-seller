@@ -17,16 +17,31 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+const SESSION_EXPIRED_EVENT = 'auth:session-expired';
+
+export function dispatchSessionExpired() {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent(SESSION_EXPIRED_EVENT));
+  }
+}
+
 api.interceptors.response.use(
   (response) => response,
   (error) => {
+    const statusCode = error.response?.status ?? error.response?.data?.statusCode;
+
+    // При 401 (протухшая сессия) — выходим и показываем экран авторизации
+    if (statusCode === 401 && typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent(SESSION_EXPIRED_EVENT));
+    }
+
     if (error.response?.data) {
       const errorData = error.response.data;
       const message = errorData.message || 'An error occurred';
-      const statusCode = errorData.statusCode || error.response.status;
+      const code = errorData.statusCode || error.response?.status;
 
       const enhancedError = new Error(message);
-      (enhancedError as any).statusCode = statusCode;
+      (enhancedError as any).statusCode = code;
       (enhancedError as any).errors = errorData.errors;
 
       return Promise.reject(enhancedError);

@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { CustomerSettingsController } from './customer-settings.controller';
 import { CustomerSettingsService } from './customer-settings.service';
@@ -10,14 +10,14 @@ import {
   CustomerSettings,
   CustomerSettingsSchema,
 } from './schemas/customer-settings.schema';
-import { CustomerTariffsModule } from '../customer-tariffs/customer-tariffs.module';
+import { TariffUsageModule } from '../tariff-usage/tariff-usage.module';
 
 @Module({
   imports: [
     MongooseModule.forFeature([
       { name: CustomerSettings.name, schema: CustomerSettingsSchema },
     ]),
-    CustomerTariffsModule,
+    forwardRef(() => TariffUsageModule),
   ],
   controllers: [CustomerSettingsController],
   providers: [
