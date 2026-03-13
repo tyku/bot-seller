@@ -5,7 +5,10 @@ import {
   Logger,
 } from '@nestjs/common';
 import { CustomerSettingsRepository } from './customer-settings.repository';
-import { CreateCustomerSettingsDto, UpdateCustomerSettingsDto } from './dto/create-customer-settings.dto';
+import {
+  CreateCustomerSettingsDto,
+  UpdateCustomerSettingsDto,
+} from './dto/create-customer-settings.dto';
 import { ResponseCustomerSettingsDto } from './dto/response-customer-settings.dto';
 import {
   CustomerSettingsDocument,
@@ -16,6 +19,7 @@ import { WebhookSecretService } from './services/webhook-secret.service';
 import { BotCacheService } from './services/bot-cache.service';
 import { TelegramWebhookService } from './services/telegram-webhook.service';
 import { TariffUsageService } from '../tariff-usage/tariff-usage.service';
+import { LlmService } from '../llm/llm.service';
 
 @Injectable()
 export class CustomerSettingsService {
@@ -27,6 +31,7 @@ export class CustomerSettingsService {
     private readonly botCacheService: BotCacheService,
     private readonly telegramWebhookService: TelegramWebhookService,
     private readonly tariffUsageService: TariffUsageService,
+    private readonly llmService: LlmService,
   ) {}
 
   async create(
@@ -55,9 +60,14 @@ export class CustomerSettingsService {
         webhookSecret = this.webhookSecretService.encrypt(plainSecret);
       }
 
+      const normalizedPrompt = await this.computeNormalizedPrompt(
+        createCustomerSettingsDto.prompts ?? [],
+      );
+
       const customerSettings = await this.customerSettingsRepository.create({
         ...createCustomerSettingsDto,
         webhookSecret,
+        ...(normalizedPrompt != null && { normalizedPrompt }),
       });
 
       this.logger.log(`Customer settings created successfully: ${customerSettings._id}`);
@@ -143,8 +153,20 @@ export class CustomerSettingsService {
       await this.activateTelegramBot(id, current);
     }
 
+    // Нормализуем промпт только при сохранении/изменении prompts
+    let dataToUpdate: UpdateCustomerSettingsDto & { normalizedPrompt?: string } =
+      { ...updateData };
+    if (updateData.prompts !== undefined) {
+      const normalizedPrompt = await this.computeNormalizedPrompt(
+        updateData.prompts,
+      );
+      if (normalizedPrompt != null) {
+        dataToUpdate = { ...dataToUpdate, normalizedPrompt };
+      }
+    }
+
     try {
-      const updated = await this.customerSettingsRepository.update(id, updateData);
+      const updated = await this.customerSettingsRepository.update(id, dataToUpdate);
       if (!updated) {
         throw new NotFoundException('Customer settings not found');
       }
@@ -239,6 +261,32 @@ export class CustomerSettingsService {
     this.logger.log(`Telegram bot ${botId} deactivated: webhook deleted, cache invalidated`);
   }
 
+  // ─────────────── Normalized prompt ───────────────
+
+  /**
+   * Берёт пользовательский промпт (context), системный с типом prompt, собирает запрос в LLM,
+   * возвращает ответ для сохранения в normalizedPrompt. Если пользовательского промпта нет — null.
+   */
+  private async computeNormalizedPrompt(
+    prompts: Array<{ body?: string }>,
+  ): Promise<string | null> {
+    const userPrompt = prompts
+      ?.map((p) => p.body?.trim())
+      .filter((b): b is string => Boolean(b))
+      .join('\n\n');
+    if (!userPrompt) {
+      return null;
+    }
+    try {
+      return await this.llmService.normalizePrompt(userPrompt);
+    } catch (error) {
+      this.logger.warn(
+        `Failed to compute normalized prompt: ${(error as Error).message}`,
+      );
+      return null;
+    }
+  }
+
   // ─────────────── Mapping ───────────────
 
   private mapToResponseDto(
@@ -256,6 +304,7 @@ export class CustomerSettingsService {
         body: prompt.body,
         type: prompt.type,
       })),
+      normalizedPrompt: customerSettings.normalizedPrompt,
       createdAt: customerSettings.createdAt,
       updatedAt: customerSettings.updatedAt,
     });

@@ -14,6 +14,7 @@ export class ResponseCustomerSettingsDto {
   botType: BotType;
   status: BotStatus;
   prompts: PromptDto[];
+  normalizedPrompt?: string;
   createdAt: Date;
   updatedAt: Date;
 

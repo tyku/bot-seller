@@ -1,12 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { CustomerSettingsRepository } from '../customer-settings/customer-settings.repository';
 import { ConversationsService } from '../conversations/conversations.service';
 import {
   ConversationPlatform,
   ConversationMessageType,
 } from '../conversations/schemas/conversation.schema';
-import { PromptType } from '../customer-settings/schemas/customer-settings.schema';
 import { LLM_MODELS, type LlmModelId } from './constants';
 import { SystemPromptService } from './system-prompt.service';
 import { sanitizeText } from '../common/pii-sanitizer';
@@ -21,6 +19,8 @@ export interface OpenRouterMessage {
 export interface LlmChatOptions {
   messages: OpenRouterMessage[];
   model?: LlmModelId;
+  /** Не обогащать сообщения глобальными системными промптами (для нормализации промпта) */
+  skipEnrich?: boolean;
 }
 
 @Injectable()
@@ -31,7 +31,6 @@ export class LlmService {
 
   constructor(
     private readonly configService: ConfigService,
-    private readonly customerSettingsRepository: CustomerSettingsRepository,
     private readonly conversationsService: ConversationsService,
     private readonly systemPromptService: SystemPromptService,
   ) {
@@ -42,15 +41,21 @@ export class LlmService {
   }
 
   /**
-   * Берёт промпт из настроек кастомера (botId), контекст из conversations,
-   * собирает сообщения и возвращает ответ LLM.
+   * Собирает сообщения из системного промпта (передаёт вызывающий) и истории диалога,
+   * возвращает ответ LLM.
    */
   async chatWithContext(
     botId: string,
     platform: ConversationPlatform,
     chatId: string,
+    systemPrompt?: string,
   ): Promise<string> {
-    const messages = await this.buildMessagesFromContext(botId, platform, chatId);
+    const messages = await this.buildMessagesFromContext(
+      botId,
+      platform,
+      chatId,
+      systemPrompt,
+    );
     if (messages.length === 0) {
       return 'Чем могу помочь?';
     }
@@ -58,15 +63,14 @@ export class LlmService {
   }
 
   /**
-   * Собирает массив сообщений для LLM: системный промпт из настроек бота + история диалога.
+   * Собирает массив сообщений для LLM: системный промпт + история диалога из conversations.
    */
   private async buildMessagesFromContext(
     botId: string,
     platform: ConversationPlatform,
     chatId: string,
+    systemPrompt?: string,
   ): Promise<OpenRouterMessage[]> {
-    const settings = await this.customerSettingsRepository.findById(botId);
-    const contextPrompt = settings?.prompts?.find((p) => p.type === PromptType.CONTEXT);
     const conversationMessages = await this.conversationsService.getMessages(
       platform,
       chatId,
@@ -75,8 +79,8 @@ export class LlmService {
 
     const openRouterMessages: OpenRouterMessage[] = [];
 
-    if (contextPrompt?.body) {
-      openRouterMessages.push({ role: 'system', content: contextPrompt.body });
+    if (systemPrompt?.trim()) {
+      openRouterMessages.push({ role: 'system', content: systemPrompt.trim() });
     }
 
     for (const m of conversationMessages) {
@@ -93,11 +97,29 @@ export class LlmService {
   }
 
   /**
+   * Нормализует пользовательский промпт: системные промпты с типом prompt + пользовательский текст,
+   * запрос в модель, возврат ответа (для сохранения в normalizedPrompt).
+   */
+  async normalizePrompt(userPrompt: string): Promise<string> {
+    const systemMessages =
+      await this.systemPromptService.getSystemMessagesForPromptType();
+    const messages: OpenRouterMessage[] = [
+      ...systemMessages,
+      { role: 'user', content: userPrompt.trim() },
+    ];
+    return this.chat({ messages, skipEnrich: true });
+  }
+
+  /**
    * Отправка запроса в OpenRouter (chat completions).
    * Если API key не задан, возвращает заглушку.
    */
   async chat(options: LlmChatOptions): Promise<string> {
-    const { messages, model = this.defaultModel as LlmModelId } = options;
+    const {
+      messages,
+      model = this.defaultModel as LlmModelId,
+      skipEnrich = false,
+    } = options;
 
     // Перед отправкой в LLM очищаем содержимое сообщений от PII.
     const sanitizedMessages = messages.map((m) => ({
@@ -105,9 +127,10 @@ export class LlmService {
       content: sanitizeText(m.content),
     }));
 
-    // Применяем глобальные системные промты (из .env + type=message из БД) ко всем запросам.
-    const enrichedMessages =
-      await this.systemPromptService.enrichMessages(sanitizedMessages);
+    // Применяем глобальные системные промты (из .env + type=message из БД), если не отключено.
+    const enrichedMessages = skipEnrich
+      ? sanitizedMessages
+      : await this.systemPromptService.enrichMessages(sanitizedMessages);
 
     if (!this.apiKey) {
       this.logger.warn('OPENROUTER_API_KEY not set, returning stub reply');

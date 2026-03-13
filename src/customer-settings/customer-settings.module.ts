@@ -11,6 +11,7 @@ import {
   CustomerSettingsSchema,
 } from './schemas/customer-settings.schema';
 import { TariffUsageModule } from '../tariff-usage/tariff-usage.module';
+import { LlmModule } from '../llm/llm.module';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { TariffUsageModule } from '../tariff-usage/tariff-usage.module';
       { name: CustomerSettings.name, schema: CustomerSettingsSchema },
     ]),
     forwardRef(() => TariffUsageModule),
+    forwardRef(() => LlmModule),
   ],
   controllers: [CustomerSettingsController],
   providers: [

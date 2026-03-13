@@ -1,7 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
-import { CustomerSettingsModule } from '../customer-settings/customer-settings.module';
 import { ConversationsModule } from '../conversations/conversations.module';
 import { LlmService } from './llm.service';
 import { LlmRateLimitService } from './llm-rate-limit.service';
@@ -18,7 +17,6 @@ import {
     MongooseModule.forFeature([
       { name: SystemPrompt.name, schema: SystemPromptSchema },
     ]),
-    CustomerSettingsModule,
     ConversationsModule,
   ],
   providers: [

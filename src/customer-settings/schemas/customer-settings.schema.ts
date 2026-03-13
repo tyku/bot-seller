@@ -55,6 +55,10 @@ export class CustomerSettings {
   @Prop({ type: [PromptSchema], default: [] })
   prompts: Prompt[];
 
+  /** Нормализованный промпт (результат LLM по пользовательскому промпту и системному type=prompt) */
+  @Prop()
+  normalizedPrompt?: string;
+
   @Prop()
   createdAt: Date;
 

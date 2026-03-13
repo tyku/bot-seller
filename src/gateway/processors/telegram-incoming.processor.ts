@@ -113,10 +113,17 @@ export class TelegramIncomingProcessor extends WorkerHost {
       }
     }
 
+    const systemPrompt =
+      settings.normalizedPrompt ??
+      settings.prompts
+        ?.map((p) => p.body?.trim())
+        .filter((b): b is string => Boolean(b))
+        .join('\n\n');
     const text = await this.llmService.chatWithContext(
       botId,
       ConversationPlatform.TG,
       String(chatId),
+      systemPrompt,
     );
     await this.saveAssistantReply(chatId, botId, text);
     await this.sendReply(settings.token, chatId, text, botId);

@@ -19,7 +19,10 @@ export class CustomerSettingsRepository {
   ) {}
 
   async create(
-    data: CreateCustomerSettingsDto & { webhookSecret?: string },
+    data: CreateCustomerSettingsDto & {
+      webhookSecret?: string;
+      normalizedPrompt?: string;
+    },
   ): Promise<CustomerSettingsDocument> {
     const customerSettings = new this.customerSettingsModel(data);
     return customerSettings.save();
@@ -58,7 +61,7 @@ export class CustomerSettingsRepository {
 
   async update(
     id: string,
-    updateData: Partial<CreateCustomerSettingsDto>,
+    updateData: Partial<CreateCustomerSettingsDto> & { normalizedPrompt?: string },
   ): Promise<CustomerSettingsDocument | null> {
     return this.customerSettingsModel
       .findByIdAndUpdate(id, updateData, { new: true })

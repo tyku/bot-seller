@@ -83,6 +83,14 @@ export class SystemPromptService implements OnModuleInit {
   }
 
   /**
+   * Системные сообщения с типом prompt (для нормализации пользовательского промпта).
+   */
+  async getSystemMessagesForPromptType(): Promise<OpenRouterMessage[]> {
+    const texts = await this.getPromptTextsByType(SystemPromptType.PROMPT);
+    return texts.map((text) => ({ role: 'system' as const, content: text }));
+  }
+
+  /**
    * Собирает системные сообщения: все с типом message (из кэша или БД).
    *
    * Параметры для выравнивателя (rawInstruction / тип prompt) пока не используются.
