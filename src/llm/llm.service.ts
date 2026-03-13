@@ -8,6 +8,7 @@ import {
 } from '../conversations/schemas/conversation.schema';
 import { PromptType } from '../customer-settings/schemas/customer-settings.schema';
 import { LLM_MODELS, type LlmModelId } from './constants';
+import { SystemPromptService } from './system-prompt.service';
 
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
@@ -31,6 +32,7 @@ export class LlmService {
     private readonly configService: ConfigService,
     private readonly customerSettingsRepository: CustomerSettingsRepository,
     private readonly conversationsService: ConversationsService,
+    private readonly systemPromptService: SystemPromptService,
   ) {
     this.apiKey = this.configService.get<string>('openRouter.apiKey');
     this.defaultModel =
@@ -96,6 +98,9 @@ export class LlmService {
   async chat(options: LlmChatOptions): Promise<string> {
     const { messages, model = this.defaultModel as LlmModelId } = options;
 
+    // Применяем глобальные системные промты/выравниватель ко всем запросам.
+    const enrichedMessages = this.systemPromptService.enrichMessages(messages);
+
     if (!this.apiKey) {
       this.logger.warn('OPENROUTER_API_KEY not set, returning stub reply');
       return 'Принял! Скоро тут будет умный ответ. (LLM не настроен.)';
@@ -104,7 +109,10 @@ export class LlmService {
     try {
       const payload = {
         model,
-        messages: messages.map((m) => ({ role: m.role, content: m.content })),
+        messages: enrichedMessages.map((m) => ({
+          role: m.role,
+          content: m.content,
+        })),
         stream: false,
       };
       this.logger.debug(

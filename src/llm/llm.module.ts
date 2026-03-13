@@ -4,10 +4,11 @@ import { CustomerSettingsModule } from '../customer-settings/customer-settings.m
 import { ConversationsModule } from '../conversations/conversations.module';
 import { LlmService } from './llm.service';
 import { LlmRateLimitService } from './llm-rate-limit.service';
+import { SystemPromptService } from './system-prompt.service';
 
 @Module({
   imports: [ConfigModule, CustomerSettingsModule, ConversationsModule],
-  providers: [LlmService, LlmRateLimitService],
-  exports: [LlmService, LlmRateLimitService],
+  providers: [LlmService, LlmRateLimitService, SystemPromptService],
+  exports: [LlmService, LlmRateLimitService, SystemPromptService],
 })
 export class LlmModule {}
