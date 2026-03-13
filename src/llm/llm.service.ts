@@ -147,8 +147,19 @@ export class LlmService {
       const data = (await response.json()) as {
         choices?: Array<{ message?: { content?: string } }>;
       };
-      const content = data.choices?.[0]?.message?.content?.trim();
-      return content ?? 'Нет ответа от модели.';
+      const raw = data.choices?.[0]?.message?.content?.trim();
+      if (raw == null) return 'Нет ответа от модели.';
+
+      // Системный промпт требует формат { answer: string } — достаём answer.
+      try {
+        const parsed = JSON.parse(raw) as { answer?: unknown };
+        if (parsed != null && typeof parsed.answer === 'string' && parsed.answer.trim()) {
+          return parsed.answer.trim();
+        }
+      } catch {
+        // Не JSON или нет поля answer — отдаём как есть
+      }
+      return raw;
     } catch (error) {
       this.logger.error(`OpenRouter request failed: ${(error as Error).message}`);
       return 'Извините, произошла ошибка при обработке. Попробуйте позже.';
