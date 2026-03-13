@@ -9,6 +9,7 @@ import {
 import { PromptType } from '../customer-settings/schemas/customer-settings.schema';
 import { LLM_MODELS, type LlmModelId } from './constants';
 import { SystemPromptService } from './system-prompt.service';
+import { sanitizeText } from '../common/pii-sanitizer';
 
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
@@ -98,8 +99,15 @@ export class LlmService {
   async chat(options: LlmChatOptions): Promise<string> {
     const { messages, model = this.defaultModel as LlmModelId } = options;
 
+    // Перед отправкой в LLM очищаем содержимое сообщений от PII.
+    const sanitizedMessages = messages.map((m) => ({
+      ...m,
+      content: sanitizeText(m.content),
+    }));
+
     // Применяем глобальные системные промты/выравниватель ко всем запросам.
-    const enrichedMessages = this.systemPromptService.enrichMessages(messages);
+    const enrichedMessages =
+      this.systemPromptService.enrichMessages(sanitizedMessages);
 
     if (!this.apiKey) {
       this.logger.warn('OPENROUTER_API_KEY not set, returning stub reply');
@@ -111,7 +119,7 @@ export class LlmService {
         model,
         messages: enrichedMessages.map((m) => ({
           role: m.role,
-          content: m.content,
+            content: m.content,
         })),
         stream: false,
       };
