@@ -105,9 +105,9 @@ export class LlmService {
       content: sanitizeText(m.content),
     }));
 
-    // Применяем глобальные системные промты/выравниватель ко всем запросам.
+    // Применяем глобальные системные промты (из .env + type=message из БД) ко всем запросам.
     const enrichedMessages =
-      this.systemPromptService.enrichMessages(sanitizedMessages);
+      await this.systemPromptService.enrichMessages(sanitizedMessages);
 
     if (!this.apiKey) {
       this.logger.warn('OPENROUTER_API_KEY not set, returning stub reply');

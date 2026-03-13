@@ -43,10 +43,5 @@ export default () => ({
     rateLimitPerBotPerHour:
       parseInt(process.env.LLM_RATE_LIMIT_PER_BOT_PER_HOUR || '2000', 10) ||
       2000,
-    /**
-     * Глобальный системный промт, который будет применяться ко всем запросам LLM.
-     * Можно оставить пустым и задать позже.
-     */
-    systemPrompt: process.env.OPENROUTER_SYSTEM_PROMPT,
   },
 });
