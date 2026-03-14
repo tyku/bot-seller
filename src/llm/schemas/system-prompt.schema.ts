@@ -9,7 +9,7 @@ export enum SystemPromptType {
   PROMPT = 'prompt',
 }
 
-@Schema({ timestamps: true, collection: 'system_prompts' })
+@Schema({ timestamps: true, collection: 'systemprompts' })
 export class SystemPrompt {
   @Prop({ required: true })
   name: string;
