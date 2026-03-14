@@ -76,10 +76,26 @@ export function SubscriptionSection() {
   };
 
   const handleConfirmChoice = () => {
-    if (confirmTariff) {
-      setPaymentTariff(confirmTariff);
-      setConfirmTariff(null);
+    if (!confirmTariff) return;
+    if (confirmTariff.trial) {
+      (async () => {
+        setPayLoading(true);
+        setPayError(null);
+        try {
+          await subscriptionApi.pay(confirmTariff!.id);
+          const subRes = await subscriptionApi.getCurrent();
+          setCurrentSubscription(subRes.data ?? null);
+          setConfirmTariff(null);
+        } catch (err) {
+          setPayError(err instanceof Error ? err.message : 'Ошибка активации');
+        } finally {
+          setPayLoading(false);
+        }
+      })();
+      return;
     }
+    setPaymentTariff(confirmTariff);
+    setConfirmTariff(null);
   };
 
   const handleBackFromPayment = () => {
@@ -268,7 +284,7 @@ export function SubscriptionSection() {
             </div>
             <div className="text-right">
               <p className="text-3xl font-bold text-blue-600">
-                {currentSubscription.tariff.price} ₽
+                {currentSubscription.tariff.trial ? 'Бесплатно' : `${currentSubscription.tariff.price} ₽`}
               </p>
               <p className="text-sm text-gray-500">
                 {currentSubscription.expiresAt
@@ -331,42 +347,49 @@ export function SubscriptionSection() {
       {/* All plans from backend */}
       <div>
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Все тарифы</h3>
-        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 items-stretch">
           {tariffs.map((tariff) => {
             const isCurrent = tariff.id === activeTariffId;
             const isDisabled = isCurrent || hasActiveSubscription;
             return (
               <Card
                 key={tariff.id}
-                className={`relative ${
+                className={`relative flex flex-col h-full ${
                   isCurrent ? 'ring-2 ring-blue-500' : ''
                 } ${isDisabled && !isCurrent ? 'opacity-75' : ''}`}
               >
-                <div className="text-center mb-4">
-                  <h4 className="text-xl font-bold text-gray-900 mb-1">
-                    {tariff.name}
-                  </h4>
-                  <div className="flex items-end justify-center gap-1">
-                    <span className="text-3xl font-bold text-blue-600">
-                      {tariff.price}
-                    </span>
-                    <span className="text-gray-500 mb-0.5">₽</span>
+                <div className="flex-1 flex flex-col">
+                  <div className="text-center mb-4">
+                    <h4 className="text-xl font-bold text-gray-900 mb-1">
+                      {tariff.name}
+                    </h4>
+                    <div className="flex items-end justify-center gap-1">
+                      <span className="text-3xl font-bold text-blue-600">
+                        {tariff.trial ? 'Бесплатно' : tariff.price}
+                      </span>
+                      {!tariff.trial && <span className="text-gray-500 mb-0.5">₽</span>}
+                    </div>
+                    {tariff.trial && (
+                      <span className="inline-flex items-center mt-1 px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800">
+                        Пробный период
+                      </span>
+                    )}
+                  </div>
+                  <div className="mb-6">
+                    <p className="text-sm text-gray-700 mb-2">Лимиты и возможности:</p>
+                    <ul className="space-y-1 text-sm text-gray-600">
+                      <li>• Запросы: {tariff.limits.requests === 0 ? 'по умолчанию' : tariff.limits.requests.toLocaleString()}</li>
+                      <li>• Активных чатов: {tariff.limits.chats === 0 ? '—' : tariff.limits.chats.toLocaleString()}</li>
+                      <li>• Ботов: {tariff.limits.bots === 0 ? '—' : tariff.limits.bots.toLocaleString()}</li>
+                      <li>• Срок: {formatDuration(tariff.activityDurationDays)}</li>
+                      {tariff.limits.bots > 1 && (
+                        <li className="text-gray-500 italic">Лимиты общие на всех ботов</li>
+                      )}
+                    </ul>
                   </div>
                 </div>
-                <div className="mb-6">
-                  <p className="text-sm text-gray-700 mb-2">Лимиты и возможности:</p>
-                  <ul className="space-y-1 text-sm text-gray-600">
-                    <li>• Запросы: {tariff.limits.requests === 0 ? 'по умолчанию' : tariff.limits.requests.toLocaleString()}</li>
-                    <li>• Активных чатов: {tariff.limits.chats === 0 ? '—' : tariff.limits.chats.toLocaleString()}</li>
-                    <li>• Ботов: {tariff.limits.bots === 0 ? '—' : tariff.limits.bots.toLocaleString()}</li>
-                    <li>• Срок: {formatDuration(tariff.activityDurationDays)}</li>
-                    {tariff.limits.bots > 1 && (
-                      <li className="text-gray-500 italic">Лимиты общие на всех ботов</li>
-                    )}
-                  </ul>
-                </div>
                 <Button
-                  className="w-full"
+                  className="w-full mt-auto"
                   variant={isCurrent ? 'outline' : 'primary'}
                   disabled={isDisabled}
                   onClick={() => handleSelectTariff(tariff)}
@@ -391,14 +414,27 @@ export function SubscriptionSection() {
               Подтверждение выбора
             </h3>
             <p className="text-gray-600 mb-4">
-              Тариф «{confirmTariff.name}» — {confirmTariff.price} ₽. После подтверждения вы перейдёте к оплате банковской картой (тестовый шлюз).
+              {confirmTariff.trial
+                ? `Тариф «${confirmTariff.name}» — пробный период. Оплата не требуется.`
+                : `Тариф «${confirmTariff.name}» — ${confirmTariff.price} ₽. После подтверждения вы перейдёте к оплате банковской картой (тестовый шлюз).`}
             </p>
+            {payError && (
+              <p className="text-sm text-red-600 mb-4">{payError}</p>
+            )}
             <div className="flex gap-3 justify-end">
-              <Button variant="outline" onClick={() => setConfirmTariff(null)}>
+              <Button variant="outline" onClick={() => { setConfirmTariff(null); setPayError(null); }}>
                 Отмена
               </Button>
-              <Button variant="primary" onClick={handleConfirmChoice}>
-                Перейти к оплате
+              <Button
+                variant="primary"
+                onClick={handleConfirmChoice}
+                disabled={payLoading && !!confirmTariff?.trial}
+              >
+                {confirmTariff.trial
+                  ? payLoading
+                    ? 'Активация...'
+                    : 'Активировать'
+                  : 'Перейти к оплате'}
               </Button>
             </div>
           </Card>

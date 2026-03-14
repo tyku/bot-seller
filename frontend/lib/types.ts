@@ -61,6 +61,8 @@ export interface Tariff {
   /** Длительность активности в днях (например 30, 10) */
   activityDurationDays: number | null;
   status: TariffStatus;
+  /** Пробный тариф — без оплаты */
+  trial?: boolean;
 }
 
 export interface ActiveSubscription {

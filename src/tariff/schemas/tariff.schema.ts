@@ -42,6 +42,10 @@ export class Tariff {
   @Prop({ required: true, enum: TariffStatus, default: TariffStatus.ACTIVE })
   status: TariffStatus;
 
+  /** Пробный тариф — для теста, без оплаты */
+  @Prop({ default: false })
+  trial: boolean;
+
   @Prop()
   createdAt: Date;
 

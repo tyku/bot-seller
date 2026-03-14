@@ -31,6 +31,7 @@ export class TariffService {
       },
       activityDurationDays: tariff.activityDurationDays ?? null,
       status: tariff.status,
+      trial: tariff.trial ?? false,
     });
   }
 }
