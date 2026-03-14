@@ -46,6 +46,7 @@ export class TariffUsageRepository implements OnModuleInit {
         customerId,
         tariffId: tariffId ?? null,
         requestsUsed: 0,
+        botsUsed: 0,
       });
     }
     return doc;
@@ -121,6 +122,7 @@ export class TariffUsageRepository implements OnModuleInit {
   ): Promise<{
     requestsUsed: number;
     chatsUsed: number;
+    botsUsed: number;
     last75NotificationSentAt: Date | null;
   }> {
     const [usage, chatsUsed] = await Promise.all([
@@ -130,7 +132,47 @@ export class TariffUsageRepository implements OnModuleInit {
     return {
       requestsUsed: usage.requestsUsed,
       chatsUsed,
+      botsUsed: usage.botsUsed ?? 0,
       last75NotificationSentAt: usage.last75NotificationSentAt ?? null,
     };
+  }
+
+  async incrementBotsUsed(
+    customerId: number,
+    tariffId?: string | null,
+  ): Promise<void> {
+    const filter =
+      tariffId !== undefined
+        ? { customerId, tariffId: tariffId ?? null }
+        : {
+            customerId,
+            $or: [{ tariffId: null }, { tariffId: { $exists: false } }],
+          };
+    await this.tariffUsageModel
+      .findOneAndUpdate(filter, {
+        $inc: { botsUsed: 1 },
+        $setOnInsert: { customerId, tariffId: tariffId ?? null, requestsUsed: 0 },
+      }, { new: true, upsert: true })
+      .exec();
+  }
+
+  /** Декремент с ограничением снизу 0 (на случай рассинхрона). */
+  async decrementBotsUsed(
+    customerId: number,
+    tariffId?: string | null,
+  ): Promise<void> {
+    const filter =
+      tariffId !== undefined
+        ? { customerId, tariffId: tariffId ?? null }
+        : {
+            customerId,
+            $or: [{ tariffId: null }, { tariffId: { $exists: false } }],
+          };
+    await this.tariffUsageModel
+      .findOneAndUpdate(
+        { ...filter, botsUsed: { $gt: 0 } },
+        { $inc: { botsUsed: -1 } },
+      )
+      .exec();
   }
 }

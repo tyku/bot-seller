@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
 import { ConversationsModule } from '../conversations/conversations.module';
@@ -17,7 +17,7 @@ import {
     MongooseModule.forFeature([
       { name: SystemPrompt.name, schema: SystemPromptSchema },
     ]),
-    ConversationsModule,
+    forwardRef(() => ConversationsModule),
   ],
   providers: [
     LlmService,

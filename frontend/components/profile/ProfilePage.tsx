@@ -7,15 +7,17 @@ import { useAuth } from '@/contexts/AuthContext';
 import { BotsSection } from './BotsSection';
 import { OrganizationSection } from './OrganizationSection';
 import { SubscriptionSection } from './SubscriptionSection';
+import { DebugSection } from './DebugSection';
 
 const TABS: { id: ProfileTab; label: string; icon: string }[] = [
   { id: 'bots', label: 'Боты', icon: '🤖' },
+  { id: 'debug', label: 'Тест бота', icon: '💬' },
   { id: 'organization', label: 'Организация', icon: '🏢' },
   { id: 'subscription', label: 'Тариф', icon: '💳' },
 ];
 
 function parseTab(param: string | null): ProfileTab {
-  if (param === 'organization' || param === 'subscription') return param;
+  if (param === 'organization' || param === 'subscription' || param === 'debug') return param;
   return 'bots';
 }
 
@@ -38,6 +40,8 @@ export function ProfilePage() {
     switch (activeTab) {
       case 'bots':
         return <BotsSection />;
+      case 'debug':
+        return <DebugSection />;
       case 'organization':
         return <OrganizationSection />;
       case 'subscription':

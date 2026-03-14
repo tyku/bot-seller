@@ -70,6 +70,10 @@ export class CustomerSettingsService {
         ...(normalizedPrompt != null && { normalizedPrompt }),
       });
 
+      if (!Number.isNaN(customerIdNum)) {
+        await this.tariffUsageService.recordBotCreated(customerIdNum);
+      }
+
       this.logger.log(`Customer settings created successfully: ${customerSettings._id}`);
       return this.mapToResponseDto(customerSettings);
     } catch (error) {
@@ -175,6 +179,16 @@ export class CustomerSettingsService {
         await this.deactivateTelegramBot(id, current);
       }
 
+      const isArchiving =
+        updateData.status === BotStatus.ARCHIVED &&
+        current.status !== BotStatus.ARCHIVED;
+      if (isArchiving) {
+        const customerIdNum = Number(current.customerId);
+        if (!Number.isNaN(customerIdNum)) {
+          await this.tariffUsageService.recordBotArchived(customerIdNum);
+        }
+      }
+
       this.logger.log(`Customer settings updated successfully: ${id}`);
       return this.mapToResponseDto(updated);
     } catch (error) {
@@ -202,6 +216,13 @@ export class CustomerSettingsService {
 
       if (customerSettings.status === BotStatus.ACTIVE && customerSettings.botType === BotType.TG) {
         await this.deactivateTelegramBot(id, customerSettings);
+      }
+
+      if (customerSettings.status !== BotStatus.ARCHIVED) {
+        const customerIdNum = Number(customerSettings.customerId);
+        if (!Number.isNaN(customerIdNum)) {
+          await this.tariffUsageService.recordBotArchived(customerIdNum);
+        }
       }
 
       await this.customerSettingsRepository.delete(id);

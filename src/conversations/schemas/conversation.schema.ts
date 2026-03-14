@@ -6,6 +6,13 @@ export type ConversationDocument = Conversation & Document;
 export enum ConversationPlatform {
   TG = 'tg',
   VK = 'vk',
+  /** Тестовый диалог из интерфейса отладки (chatId = customerId) */
+  TEST = 'test',
+}
+
+export enum ConversationType {
+  DEFAULT = 'default',
+  TEST = 'test',
 }
 
 export enum ConversationMessageType {
@@ -40,6 +47,9 @@ export class Conversation {
   @Prop({ required: true, index: true })
   botId: string;
 
+  @Prop({ enum: ConversationType, default: ConversationType.DEFAULT })
+  type: ConversationType;
+
   @Prop({ type: [ConversationMessageSchema], default: [] })
   messages: ConversationMessage[];
 
@@ -53,6 +63,6 @@ export class Conversation {
 export const ConversationSchema = SchemaFactory.createForClass(Conversation);
 
 ConversationSchema.index(
-  { otId: 1, platform: 1, chatId: 1 },
+  { botId: 1, platform: 1, chatId: 1 },
   { unique: true },
 );

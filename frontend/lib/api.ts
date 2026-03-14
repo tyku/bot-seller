@@ -185,6 +185,22 @@ export const usageApi = {
   },
 };
 
+// Debug chat (test dialogue for a bot)
+export const debugChatApi = {
+  send: async (botId: string, message: string): Promise<{ data: { reply: string }; success: boolean }> => {
+    const response = await api.post('/conversations/debug/send', { botId, message });
+    return response.data;
+  },
+
+  getHistory: async (botId: string): Promise<{
+    data: { messages: Array<{ type: string; content: string; createdAt: string }> };
+    success: boolean;
+  }> => {
+    const response = await api.get('/conversations/debug/history', { params: { botId } });
+    return response.data;
+  },
+};
+
 // Verification API
 export const verificationApi = {
   send: async (data: {

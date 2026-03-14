@@ -18,7 +18,7 @@ import { LlmModule } from '../llm/llm.module';
     MongooseModule.forFeature([
       { name: CustomerSettings.name, schema: CustomerSettingsSchema },
     ]),
-    forwardRef(() => TariffUsageModule),
+    TariffUsageModule,
     forwardRef(() => LlmModule),
   ],
   controllers: [CustomerSettingsController],

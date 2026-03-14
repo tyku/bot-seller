@@ -1,4 +1,4 @@
-import { Module, forwardRef } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { TariffUsageService } from './tariff-usage.service';
 import { TariffUsageRepository } from './tariff-usage.repository';
@@ -11,7 +11,6 @@ import {
 import { CustomerTariffsModule } from '../customer-tariffs/customer-tariffs.module';
 import { CustomerModule } from '../customer/customer.module';
 import { TelegramModule } from '../telegram/telegram.module';
-import { CustomerSettingsModule } from '../customer-settings/customer-settings.module';
 
 @Module({
   imports: [
@@ -22,7 +21,6 @@ import { CustomerSettingsModule } from '../customer-settings/customer-settings.m
     CustomerTariffsModule,
     CustomerModule,
     TelegramModule,
-    forwardRef(() => CustomerSettingsModule),
   ],
   controllers: [TariffUsageController],
   providers: [TariffUsageService, TariffUsageRepository],

@@ -15,6 +15,10 @@ export class TariffUsage {
   @Prop({ required: true, default: 0 })
   requestsUsed: number;
 
+  /** Учёт ботов по лимиту тарифа (инкремент при создании, декремент при архивации/удалении) */
+  @Prop({ required: true, default: 0 })
+  botsUsed: number;
+
   /** Когда в последний раз отправляли уведомление о 75% лимита (чтобы не спамить) */
   @Prop({ type: Date, default: null })
   last75NotificationSentAt: Date | null;

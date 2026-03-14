@@ -5,6 +5,7 @@ import {
   Conversation,
   ConversationDocument,
   ConversationPlatform,
+  ConversationType,
   ConversationMessage,
   ConversationMessageType,
 } from './schemas/conversation.schema';
@@ -34,8 +35,9 @@ export class ConversationsRepository {
     platform: ConversationPlatform,
     chatId: string,
     botId: string,
+    type: ConversationType = ConversationType.DEFAULT,
   ): Promise<ConversationDocument> {
-    const doc = new this.conversationModel({ platform, chatId, botId });
+    const doc = new this.conversationModel({ platform, chatId, botId, type });
     return doc.save();
   }
 

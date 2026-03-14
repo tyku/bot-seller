@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { ConversationsRepository } from './conversations.repository';
 import {
   ConversationPlatform,
+  ConversationType,
   ConversationMessageType,
   ConversationMessage,
 } from './schemas/conversation.schema';
@@ -16,7 +17,10 @@ export class ConversationsService {
     platform: ConversationPlatform,
     chatId: string,
     botId: string,
+    type?: ConversationType,
   ) {
+    const resolvedType =
+      type ?? (platform === ConversationPlatform.TEST ? ConversationType.TEST : ConversationType.DEFAULT);
     let conversation = await this.conversationsRepository.findByPlatformChatAndBot(
       platform,
       chatId,
@@ -27,6 +31,7 @@ export class ConversationsService {
         platform,
         chatId,
         botId,
+        resolvedType,
       );
     }
     return conversation;
