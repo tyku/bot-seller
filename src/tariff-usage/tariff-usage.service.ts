@@ -119,6 +119,21 @@ export class TariffUsageService {
   }
 
   /**
+   * Установить botsUsed при смене тарифа (вызывается из прослойки по фактическому числу ботов).
+   */
+  async syncBotsUsedForNewTariff(
+    customerId: number,
+    tariffId: string,
+    actualBotCount: number,
+  ): Promise<void> {
+    await this.usageRepository.setBotsUsed(
+      customerId,
+      tariffId,
+      Math.max(0, actualBotCount),
+    );
+  }
+
+  /**
    * Если использование достигло ≥75% лимита и мы ещё не отправляли уведомление — отправляем в канал верификации (Telegram).
    */
   async checkAndSend75Notification(customerId: number): Promise<void> {

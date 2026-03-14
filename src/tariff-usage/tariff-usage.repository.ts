@@ -27,6 +27,21 @@ export class TariffUsageRepository implements OnModuleInit {
   }
 
   /**
+   * Берёт botsUsed из любой другой записи usage этого пользователя (предыдущий тариф),
+   * чтобы при смене тарифа лимит не сбрасывался и учитывались уже созданные боты.
+   */
+  private async getBotsUsedFromOtherUsage(
+    customerId: number,
+    excludeTariffId: string | null,
+  ): Promise<number> {
+    const docs = await this.tariffUsageModel
+      .find({ customerId, tariffId: { $ne: excludeTariffId } })
+      .exec();
+    if (docs.length === 0) return 0;
+    return Math.max(0, ...docs.map((d) => d.botsUsed ?? 0));
+  }
+
+  /**
    * @param tariffId — привязка к тарифу подписки; для старых записей можно не передавать
    */
   async getOrCreateUsage(
@@ -42,11 +57,15 @@ export class TariffUsageRepository implements OnModuleInit {
           };
     let doc = await this.tariffUsageModel.findOne(filter).exec();
     if (!doc) {
+      const initialBotsUsed = await this.getBotsUsedFromOtherUsage(
+        customerId,
+        tariffId ?? null,
+      );
       doc = await this.tariffUsageModel.create({
         customerId,
         tariffId: tariffId ?? null,
         requestsUsed: 0,
-        botsUsed: 0,
+        botsUsed: initialBotsUsed,
       });
     }
     return doc;
@@ -172,6 +191,28 @@ export class TariffUsageRepository implements OnModuleInit {
       .findOneAndUpdate(
         { ...filter, botsUsed: { $gt: 0 } },
         { $inc: { botsUsed: -1 } },
+      )
+      .exec();
+  }
+
+  /** Устанавливает botsUsed (для прослойки при смене тарифа по фактическому числу ботов). */
+  async setBotsUsed(
+    customerId: number,
+    tariffId: string | null,
+    value: number,
+  ): Promise<void> {
+    await this.tariffUsageModel
+      .findOneAndUpdate(
+        { customerId, tariffId: tariffId ?? null },
+        {
+          $set: { botsUsed: Math.max(0, value) },
+          $setOnInsert: {
+            customerId,
+            tariffId: tariffId ?? null,
+            requestsUsed: 0,
+          },
+        },
+        { new: true, upsert: true },
       )
       .exec();
   }

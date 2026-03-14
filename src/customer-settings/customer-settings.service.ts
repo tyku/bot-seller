@@ -131,6 +131,13 @@ export class CustomerSettingsService {
     }
   }
 
+  /** Количество ботов без архива (для прослойки при смене тарифа). */
+  async getActiveBotsCount(customerId: number): Promise<number> {
+    return this.customerSettingsRepository.countNonArchivedByCustomerId(
+      String(customerId),
+    );
+  }
+
   async update(
     id: string,
     updateData: UpdateCustomerSettingsDto,
@@ -152,6 +159,25 @@ export class CustomerSettingsService {
       updateData.status !== undefined &&
       updateData.status !== BotStatus.ACTIVE &&
       current.status === BotStatus.ACTIVE;
+    const isReactivating =
+      current.status === BotStatus.ARCHIVED &&
+      updateData.status !== undefined &&
+      updateData.status !== BotStatus.ARCHIVED;
+
+    if (isReactivating) {
+      const customerIdNum = Number(current.customerId);
+      if (!Number.isNaN(customerIdNum)) {
+        const botResult =
+          await this.tariffUsageService.tryConsumeBot(customerIdNum);
+        if (!botResult.allowed) {
+          const message =
+            botResult.reason === 'subscription_inactive'
+              ? 'Нет активной подписки. Оформите тариф для реактивации бота.'
+              : 'Достигнут лимит ботов по тарифу. Увеличьте тариф или архивируйте другой бот.';
+          throw new BadRequestException(message);
+        }
+      }
+    }
 
     if (isActivating && current.botType === BotType.TG) {
       await this.activateTelegramBot(id, current);
@@ -186,6 +212,13 @@ export class CustomerSettingsService {
         const customerIdNum = Number(current.customerId);
         if (!Number.isNaN(customerIdNum)) {
           await this.tariffUsageService.recordBotArchived(customerIdNum);
+        }
+      }
+
+      if (isReactivating) {
+        const customerIdNum = Number(current.customerId);
+        if (!Number.isNaN(customerIdNum)) {
+          await this.tariffUsageService.recordBotCreated(customerIdNum);
         }
       }
 

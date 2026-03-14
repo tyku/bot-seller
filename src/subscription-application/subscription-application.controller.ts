@@ -7,7 +7,7 @@ import {
   HttpStatus,
   Post,
 } from '@nestjs/common';
-import { CustomerTariffsService } from './customer-tariffs.service';
+import { SubscriptionApplicationService } from './subscription-application.service';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { CurrentUserData } from '../auth/decorators/current-user.decorator';
 
@@ -16,9 +16,9 @@ class PayBodyDto {
 }
 
 @Controller('customer-tariffs')
-export class CustomerTariffsController {
+export class SubscriptionApplicationController {
   constructor(
-    private readonly customerTariffsService: CustomerTariffsService,
+    private readonly subscriptionApplication: SubscriptionApplicationService,
   ) {}
 
   @Get('current')
@@ -27,11 +27,11 @@ export class CustomerTariffsController {
     @CurrentUser() user: CurrentUserData,
   ): Promise<{
     success: boolean;
-    data: Awaited<ReturnType<CustomerTariffsService['getActiveSubscription']>>;
+    data: Awaited<ReturnType<SubscriptionApplicationService['getCurrentSubscription']>>;
     message: string;
   }> {
     const data =
-      await this.customerTariffsService.getActiveSubscription(user.customerId);
+      await this.subscriptionApplication.getCurrentSubscription(user.customerId);
     return {
       success: true,
       data,
@@ -55,7 +55,7 @@ export class CustomerTariffsController {
     if (!tariffId || typeof tariffId !== 'string') {
       throw new BadRequestException('tariffId is required');
     }
-    const ct = await this.customerTariffsService.completeTestPayment(
+    const ct = await this.subscriptionApplication.completePayment(
       user.customerId,
       tariffId,
     );

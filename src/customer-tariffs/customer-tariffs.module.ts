@@ -7,7 +7,6 @@ import {
   CustomerTariffSchema,
 } from './schemas/customer-tariff.schema';
 import { TariffModule } from '../tariff/tariff.module';
-import { CustomerTariffsController } from './customer-tariffs.controller';
 
 @Module({
   imports: [
@@ -16,7 +15,6 @@ import { CustomerTariffsController } from './customer-tariffs.controller';
     ]),
     TariffModule,
   ],
-  controllers: [CustomerTariffsController],
   providers: [CustomerTariffsService, CustomerTariffsRepository],
   exports: [CustomerTariffsService, CustomerTariffsRepository],
 })
