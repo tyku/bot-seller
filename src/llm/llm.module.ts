@@ -1,6 +1,5 @@
-import { Module, forwardRef } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
-import { ConversationsModule } from '../conversations/conversations.module';
 import { LlmService } from './llm.service';
 import { LlmRateLimitService } from './llm-rate-limit.service';
 import { SystemPromptService } from './system-prompt.service';
@@ -15,7 +14,6 @@ import {
     MongooseModule.forFeature([
       { name: SystemPrompt.name, schema: SystemPromptSchema },
     ]),
-    forwardRef(() => ConversationsModule),
   ],
   providers: [
     LlmService,

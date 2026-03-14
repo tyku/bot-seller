@@ -1,10 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { ConversationsService } from '../conversations/conversations.service';
-import {
-  ConversationPlatform,
-  ConversationMessageType,
-} from '../conversations/schemas/conversation.schema';
 import { LLM_MODELS, type LlmModelId } from './constants';
 import { SystemPromptService } from './system-prompt.service';
 import { sanitizeText } from '../common/pii-sanitizer';
@@ -31,69 +26,12 @@ export class LlmService {
 
   constructor(
     private readonly configService: ConfigService,
-    private readonly conversationsService: ConversationsService,
     private readonly systemPromptService: SystemPromptService,
   ) {
     this.apiKey = this.configService.get<string>('openRouter.apiKey');
     this.defaultModel =
       this.configService.get<string>('openRouter.defaultModel') ??
       LLM_MODELS.DEFAULT;
-  }
-
-  /**
-   * Собирает сообщения из системного промпта (передаёт вызывающий) и истории диалога,
-   * возвращает ответ LLM.
-   */
-  async chatWithContext(
-    botId: string,
-    platform: ConversationPlatform,
-    chatId: string,
-    systemPrompt?: string,
-  ): Promise<string> {
-    const messages = await this.buildMessagesFromContext(
-      botId,
-      platform,
-      chatId,
-      systemPrompt,
-    );
-    if (messages.length === 0) {
-      return 'Чем могу помочь?';
-    }
-    return this.chat({ messages });
-  }
-
-  /**
-   * Собирает массив сообщений для LLM: системный промпт + история диалога из conversations.
-   */
-  private async buildMessagesFromContext(
-    botId: string,
-    platform: ConversationPlatform,
-    chatId: string,
-    systemPrompt?: string,
-  ): Promise<OpenRouterMessage[]> {
-    const conversationMessages = await this.conversationsService.getMessages(
-      platform,
-      chatId,
-      botId,
-    );
-
-    const openRouterMessages: OpenRouterMessage[] = [];
-
-    if (systemPrompt?.trim()) {
-      openRouterMessages.push({ role: 'system', content: systemPrompt.trim() });
-    }
-
-    for (const m of conversationMessages) {
-      const role =
-        m.type === ConversationMessageType.SYSTEM
-          ? 'system'
-          : m.type === ConversationMessageType.ASSISTANT
-            ? 'assistant'
-            : 'user';
-      openRouterMessages.push({ role, content: m.content });
-    }
-
-    return openRouterMessages;
   }
 
   /**

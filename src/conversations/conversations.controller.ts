@@ -14,8 +14,8 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { CurrentUserData } from '../auth/decorators/current-user.decorator';
 import { ConversationsService } from './conversations.service';
+import { ConversationReplyService } from './conversation-reply.service';
 import { CustomerSettingsRepository } from '../customer-settings/customer-settings.repository';
-import { LlmService } from '../llm/llm.service';
 import { ConversationPlatform } from './schemas/conversation.schema';
 import { ZodValidationPipe } from '../customer/pipes/zod-validation.pipe';
 import { DebugSendSchema, type DebugSendDto } from './dto/debug-send.dto';
@@ -26,8 +26,8 @@ export class ConversationsController {
 
   constructor(
     private readonly conversationsService: ConversationsService,
+    private readonly conversationReplyService: ConversationReplyService,
     private readonly customerSettingsRepository: CustomerSettingsRepository,
-    private readonly llmService: LlmService,
   ) {}
 
   /**
@@ -69,7 +69,7 @@ export class ConversationsController {
         .filter((b): b is string => Boolean(b))
         .join('\n\n');
 
-    const reply = await this.llmService.chatWithContext(
+    const reply = await this.conversationReplyService.replyInContext(
       botId,
       ConversationPlatform.TEST,
       chatId,

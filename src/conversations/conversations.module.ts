@@ -1,4 +1,4 @@
-import { Module, forwardRef } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import {
   Conversation,
@@ -6,6 +6,7 @@ import {
 } from './schemas/conversation.schema';
 import { ConversationsRepository } from './conversations.repository';
 import { ConversationsService } from './conversations.service';
+import { ConversationReplyService } from './conversation-reply.service';
 import { ConversationsController } from './conversations.controller';
 import { CustomerSettingsModule } from '../customer-settings/customer-settings.module';
 import { LlmModule } from '../llm/llm.module';
@@ -16,10 +17,10 @@ import { LlmModule } from '../llm/llm.module';
       { name: Conversation.name, schema: ConversationSchema },
     ]),
     CustomerSettingsModule,
-    forwardRef(() => LlmModule),
+    LlmModule,
   ],
   controllers: [ConversationsController],
-  providers: [ConversationsRepository, ConversationsService],
-  exports: [ConversationsService, ConversationsRepository],
+  providers: [ConversationsRepository, ConversationsService, ConversationReplyService],
+  exports: [ConversationsService, ConversationsRepository, ConversationReplyService],
 })
 export class ConversationsModule {}

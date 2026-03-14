@@ -4,9 +4,9 @@ import { Job } from 'bullmq';
 import { CustomerSettingsRepository } from '../../customer-settings/customer-settings.repository';
 import { UserService } from '../../user/user.service';
 import { ConversationsService } from '../../conversations/conversations.service';
+import { ConversationReplyService } from '../../conversations/conversation-reply.service';
 import { ConversationPlatform } from '../../conversations/schemas/conversation.schema';
 import { SourceType } from '../../user/schemas/user.schema';
-import { LlmService } from '../../llm/llm.service';
 import { LlmRateLimitService } from '../../llm/llm-rate-limit.service';
 import { TariffUsageService } from '../../tariff-usage/tariff-usage.service';
 import { TELEGRAM_INCOMING_QUEUE } from '../constants';
@@ -25,7 +25,7 @@ export class TelegramIncomingProcessor extends WorkerHost {
     private readonly settingsRepository: CustomerSettingsRepository,
     private readonly userService: UserService,
     private readonly conversationsService: ConversationsService,
-    private readonly llmService: LlmService,
+    private readonly conversationReplyService: ConversationReplyService,
     private readonly llmRateLimit: LlmRateLimitService,
     private readonly tariffUsageService: TariffUsageService,
   ) {
@@ -119,7 +119,7 @@ export class TelegramIncomingProcessor extends WorkerHost {
         ?.map((p) => p.body?.trim())
         .filter((b): b is string => Boolean(b))
         .join('\n\n');
-    const text = await this.llmService.chatWithContext(
+    const text = await this.conversationReplyService.replyInContext(
       botId,
       ConversationPlatform.TG,
       String(chatId),
