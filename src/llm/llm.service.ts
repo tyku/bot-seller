@@ -89,7 +89,7 @@ export class LlmService {
         })),
         stream: false,
       };
-      this.logger.debug(
+      this.logger.log(
         `OpenRouter request: model=${payload.model}, messages=${JSON.stringify(payload.messages)}`,
       );
 
