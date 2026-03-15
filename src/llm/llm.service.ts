@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { LLM_MODELS, type LlmModelId } from './constants';
+import { type LlmModelId } from './constants';
 import { SystemPromptService } from './system-prompt.service';
 import { sanitizeText } from '../common/pii-sanitizer';
 
@@ -29,9 +29,14 @@ export class LlmService {
     private readonly systemPromptService: SystemPromptService,
   ) {
     this.apiKey = this.configService.get<string>('openRouter.apiKey');
-    this.defaultModel =
-      this.configService.get<string>('openRouter.defaultModel') ??
-      LLM_MODELS.DEFAULT;
+
+    const model = this.configService.get<string>('openRouter.defaultModel');
+    
+    if (!model) {
+      throw new Error('OPENROUTER_DEFAULT_MODEL is not set');
+    }
+
+    this.defaultModel = model;
   }
 
   /**
