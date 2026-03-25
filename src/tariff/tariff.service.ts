@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { TariffRepository } from './tariff.repository';
 import { TariffResponseDto } from './dto/tariff-response.dto';
 import { TariffDocument } from './schemas/tariff.schema';
@@ -17,6 +17,19 @@ export class TariffService {
   async findById(id: string): Promise<TariffResponseDto | null> {
     const tariff = await this.tariffRepository.findById(id);
     return tariff ? this.toResponseDto(tariff) : null;
+  }
+
+  /**
+   * Активный тариф с trial: true — при нескольких берётся последний по createdAt.
+   */
+  async getLatestActiveTrialTariff(): Promise<TariffDocument> {
+    const tariff = await this.tariffRepository.findLatestActiveTrialTariff();
+    if (!tariff) {
+      throw new NotFoundException(
+        'Пробный тариф не настроен: нет активного тарифа с trial=true',
+      );
+    }
+    return tariff;
   }
 
   private toResponseDto(tariff: TariffDocument): TariffResponseDto {

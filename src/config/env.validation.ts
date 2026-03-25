@@ -82,6 +82,23 @@ class EnvironmentVariables {
   @Min(1)
   @IsOptional()
   LLM_RATE_LIMIT_PER_BOT_PER_HOUR?: number;
+
+  // Demo drafts (optional)
+  @IsNumber()
+  @Min(1)
+  @Max(365)
+  @IsOptional()
+  DEMO_DRAFT_TTL_DAYS?: number;
+
+  @IsNumber()
+  @Min(1)
+  @IsOptional()
+  DEMO_RATE_LIMIT_CREATE_PER_MIN?: number;
+
+  @IsNumber()
+  @Min(1)
+  @IsOptional()
+  DEMO_RATE_LIMIT_RW_PER_MIN?: number;
 }
 
 export function validate(config: Record<string, unknown>) {

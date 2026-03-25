@@ -24,6 +24,14 @@ export class TariffRepository {
     return this.tariffModel.findById(id).exec();
   }
 
+  /** Самый новый активный тариф с trial: true (по createdAt). */
+  async findLatestActiveTrialTariff(): Promise<TariffDocument | null> {
+    return this.tariffModel
+      .findOne({ trial: true, status: TariffStatus.ACTIVE })
+      .sort({ createdAt: -1 })
+      .exec();
+  }
+
   async create(data: Partial<Tariff>): Promise<TariffDocument> {
     const tariff = new this.tariffModel(data);
     return tariff.save();

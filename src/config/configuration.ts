@@ -36,6 +36,19 @@ export default () => ({
     botUsername: process.env.TELEGRAM_BOT_USERNAME || 'your_bot',
   },
 
+  /** Анонимные демо-черновики настроек (без JWT; merge — с JWT) */
+  demo: {
+    draftTtlDays:
+      parseInt(process.env.DEMO_DRAFT_TTL_DAYS || '14', 10) || 14,
+    rateLimit: {
+      createPerMinute:
+        parseInt(process.env.DEMO_RATE_LIMIT_CREATE_PER_MIN || '30', 10) ||
+        30,
+      readWritePerMinute:
+        parseInt(process.env.DEMO_RATE_LIMIT_RW_PER_MIN || '120', 10) || 120,
+    },
+  },
+
   openRouter: {
     apiKey: process.env.OPENROUTER_API_KEY,
     defaultModel: process.env.OPENROUTER_DEFAULT_MODEL,

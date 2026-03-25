@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { CustomerTariffsRepository } from './customer-tariffs.repository';
 import { CustomerTariffDocument } from './schemas/customer-tariff.schema';
 import { TariffService } from '../tariff/tariff.service';
@@ -19,16 +23,17 @@ export class CustomerTariffsService {
     private readonly tariffService: TariffService,
   ) {}
 
-  async findByCustomerId(customerId: number): Promise<CustomerTariffDocument[]> {
+  async findByCustomerId(
+    customerId: number,
+  ): Promise<CustomerTariffDocument[]> {
     return this.customerTariffsRepository.findByCustomerId(customerId);
   }
 
   async getActiveSubscription(
     customerId: number,
   ): Promise<ActiveSubscriptionDto | null> {
-    const ct = await this.customerTariffsRepository.findActiveByCustomerId(
-      customerId,
-    );
+    const ct =
+      await this.customerTariffsRepository.findActiveByCustomerId(customerId);
     if (!ct) return null;
     const tariff = await this.tariffService.findById(ct.tariffId);
     if (!tariff) return null;
@@ -70,9 +75,8 @@ export class CustomerTariffsService {
     customerId: number,
     tariffId: string,
   ): Promise<CustomerTariffDocument> {
-    const existing = await this.customerTariffsRepository.findActiveByCustomerId(
-      customerId,
-    );
+    const existing =
+      await this.customerTariffsRepository.findActiveByCustomerId(customerId);
     if (existing) {
       throw new BadRequestException(
         'У вас уже есть активная подписка. Новый тариф можно оформить после её окончания.',
@@ -86,5 +90,34 @@ export class CustomerTariffsService {
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + days);
     return this.applyTariff({ customerId, tariffId, expiresAt });
+  }
+
+  /**
+   * Активировать пробный тариф: берётся последний по createdAt среди active + trial=true.
+   * Нельзя, если уже есть активная подписка.
+   */
+  async activateTrialSubscription(
+    customerId: number,
+  ): Promise<ActiveSubscriptionDto> {
+    const existing = await this.getActiveSubscription(customerId);
+    if (existing) {
+      throw new BadRequestException(
+        'У вас уже есть активная подписка. Пробный период недоступен.',
+      );
+    }
+    const tariff = await this.tariffService.getLatestActiveTrialTariff();
+    const days = tariff.activityDurationDays ?? 30;
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + days);
+    await this.applyTariff({
+      customerId,
+      tariffId: tariff._id.toString(),
+      expiresAt,
+    });
+    const sub = await this.getActiveSubscription(customerId);
+    if (!sub) {
+      throw new BadRequestException('Не удалось активировать подписку');
+    }
+    return sub;
   }
 }

@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -151,6 +152,12 @@ export function LoginPage() {
           </div>
           <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">Bot Seller</h1>
           <p className="text-gray-500 mt-2">Создайте продающего бота за 5 минут</p>
+          <Link
+            href="/demo"
+            className="inline-block mt-3 text-sm font-medium text-blue-600 hover:text-blue-800"
+          >
+            Попробовать демо без регистрации
+          </Link>
         </div>
 
         {/* Card */}

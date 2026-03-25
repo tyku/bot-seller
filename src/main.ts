@@ -10,10 +10,11 @@ async function bootstrap() {
   // Enable CORS
   const isDev = configService.get<string>('nodeEnv') !== 'production';
   app.enableCors({
-    origin: isDev ? true : ['http://localhost:3000'], // TODO: replace with production domain
+    origin: isDev ? true : ['http://localhost:3000', 'https://test-it.tech'], // TODO: replace with production domain
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
     credentials: true,
-    allowedHeaders: 'Content-Type,Authorization,Accept',
+    allowedHeaders:
+      'Content-Type,Authorization,Accept,X-Demo-Draft-Id,X-Demo-Draft-Secret',
   });
   
   // Enable global exception filters
@@ -21,6 +22,5 @@ async function bootstrap() {
   
   const port = configService.get<number>('port') || 3000;
   await app.listen(port);
-  console.log(`Application is running on: http://localhost:${port}`);
 }
 bootstrap();
