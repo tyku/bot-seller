@@ -60,6 +60,7 @@ export interface DemoDraftPayload {
   draftId: string;
   name: string;
   prompts: Array<{ name: string; body: string; type: 'context' }>;
+  businessDescription?: string;
   normalizedPrompt?: string;
   expiresAt: string;
 }
@@ -81,8 +82,19 @@ export const demoApi = {
   updateDraft: async (body: {
     name?: string;
     prompts?: Array<{ name: string; body: string; type: 'context' }>;
+    businessDescription?: string;
   }): Promise<{ success: boolean; data: DemoDraftPayload }> => {
     const res = await demoClient.patch('/demo/drafts/me', body);
+    return res.data;
+  },
+
+  generatePrompt: async (body: {
+    businessDescription: string;
+  }): Promise<{
+    success: boolean;
+    data: DemoDraftPayload & { generatedPrompt: string };
+  }> => {
+    const res = await demoClient.post('/demo/drafts/me/generate-prompt', body);
     return res.data;
   },
 

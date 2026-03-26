@@ -26,6 +26,10 @@ export class CustomerSettingsDraft {
   @Prop({ type: [PromptSchema], default: [] })
   prompts: Prompt[];
 
+  /** Описание бизнеса (для генерации промпта; опционально) */
+  @Prop()
+  businessDescription?: string;
+
   @Prop()
   normalizedPrompt?: string;
 

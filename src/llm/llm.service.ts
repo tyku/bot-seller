@@ -54,6 +54,24 @@ export class LlmService {
   }
 
   /**
+   * По описанию бизнеса формирует черновик промпта: что и в каком порядке спрашивать у посетителя.
+   */
+  async generatePromptFromBusinessDescription(
+    businessDescription: string,
+  ): Promise<string> {
+    const system =
+      'Ты настраиваешь сценарий чат-бота для бизнеса. По описанию бизнеса пользователя напиши ОДИН сплошной текст промпта для бота-ассистента: какие вопросы задавать посетителю, в каком порядке, и с какой целью (квалификация лида, сбор контактов, консультация и т.д.). Пиши по-русски, конкретно, без вступлений от себя и без «Здравствуйте, я ИИ». Если чего-то не хватает в описании — разумно додумай типичное для такой ниши.';
+    const messages: OpenRouterMessage[] = [
+      { role: 'system', content: system },
+      {
+        role: 'user',
+        content: `Описание бизнеса:\n\n${businessDescription.trim()}`,
+      },
+    ];
+    return this.chat({ messages, skipEnrich: true });
+  }
+
+  /**
    * Отправка запроса в OpenRouter (chat completions).
    * Если API key не задан, возвращает заглушку.
    */
@@ -103,6 +121,7 @@ export class LlmService {
         },
         body: JSON.stringify(payload),
       });
+
 
       if (!response.ok) {
         const text = await response.text();

@@ -16,6 +16,7 @@ import { CustomerSettingsService } from '../customer-settings/customer-settings.
 import type {
   UpdateDemoDraftDto,
   MergeDemoDraftDto,
+  GenerateDemoPromptDto,
 } from './dto/demo-draft.dto';
 import { LlmService } from '../llm/llm.service';
 import type { CurrentUserData } from '../auth/decorators/current-user.decorator';
@@ -91,6 +92,7 @@ export class DemoDraftService {
     name: string;
     botType: BotType;
     prompts: Array<{ name: string; body: string; type: 'context' }>;
+    businessDescription?: string;
     normalizedPrompt?: string;
     expiresAt: Date;
     createdAt?: Date;
@@ -109,6 +111,7 @@ export class DemoDraftService {
     name: string;
     botType: BotType;
     prompts: Array<{ name: string; body: string; type: 'context' }>;
+    businessDescription?: string;
     normalizedPrompt?: string;
     expiresAt: Date;
     createdAt?: Date;
@@ -129,6 +132,9 @@ export class DemoDraftService {
       ...(dto.botType !== undefined && { botType: dto.botType as BotType }),
       ...(dto.prompts !== undefined && { prompts: dto.prompts }),
       ...(dto.prompts !== undefined && { normalizedPrompt }),
+      ...(dto.businessDescription !== undefined && {
+        businessDescription: dto.businessDescription.trim() || undefined,
+      }),
       expiresAt: newExpires,
     });
 
@@ -137,6 +143,52 @@ export class DemoDraftService {
     }
 
     return this.mapPublic(updated);
+  }
+
+  /** Генерация черновика промпта по описанию бизнеса (без сохранения в prompts до «Сохранить»). */
+  async generatePromptFromBusiness(
+    creds: DraftCredentials | null,
+    clientIp: string,
+    dto: GenerateDemoPromptDto,
+  ): Promise<{
+    generatedPrompt: string;
+    draftId: string;
+    name: string;
+    botType: BotType;
+    prompts: Array<{ name: string; body: string; type: 'context' }>;
+    businessDescription?: string;
+    normalizedPrompt?: string;
+    expiresAt: Date;
+    createdAt?: Date;
+    updatedAt?: Date;
+  }> {
+    const draft = await this.loadAuthorizedDraft(creds, clientIp, 'rw');
+    await this.rateLimit.consume(
+      `generate:${clientIp}:${draft.draftId}`,
+      60,
+      this.rateLimit.getReadWriteLimitPerMinute(),
+    );
+
+    const generatedPrompt =
+      await this.llmService.generatePromptFromBusinessDescription(
+        dto.businessDescription,
+      );
+
+    const now = Date.now();
+    const newExpires = new Date(now + this.ttlMs());
+    const updated = await this.repository.updateByDraftId(draft.draftId, {
+      businessDescription: dto.businessDescription.trim(),
+      expiresAt: newExpires,
+    });
+
+    if (!updated) {
+      throw new NotFoundException('Draft not found');
+    }
+
+    return {
+      generatedPrompt,
+      ...this.mapPublic(updated),
+    };
   }
 
   async mergeDraft(user: CurrentUserData, dto: MergeDemoDraftDto) {
@@ -298,6 +350,7 @@ export class DemoDraftService {
         body: p.body,
         type: 'context' as const,
       })),
+      businessDescription: draft.businessDescription,
       normalizedPrompt: draft.normalizedPrompt,
       expiresAt: draft.expiresAt,
       createdAt: draft.createdAt,

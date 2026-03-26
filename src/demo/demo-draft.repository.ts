@@ -20,6 +20,7 @@ export class DemoDraftRepository {
     name: string;
     botType: BotType;
     prompts: Array<{ name: string; body: string; type: 'context' }>;
+    businessDescription?: string;
     normalizedPrompt?: string;
     expiresAt: Date;
   }): Promise<CustomerSettingsDraftDocument> {
@@ -39,6 +40,7 @@ export class DemoDraftRepository {
       name: string;
       botType: BotType;
       prompts: Array<{ name: string; body: string; type: 'context' }>;
+      businessDescription: string | undefined;
       normalizedPrompt: string | undefined;
       expiresAt: Date;
     }>,

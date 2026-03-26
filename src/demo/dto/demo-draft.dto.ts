@@ -9,6 +9,14 @@ export const UpdateDemoDraftSchema = z.object({
     .optional(),
   botType: z.enum(['tg', 'vk']).optional(),
   prompts: z.array(PromptSchema).optional(),
+  businessDescription: z.string().max(12000).optional(),
+});
+
+export const GenerateDemoPromptSchema = z.object({
+  businessDescription: z
+    .string()
+    .min(20, 'Описание слишком короткое')
+    .max(12000, 'Описание слишком длинное'),
 });
 
 export const MergeDemoDraftSchema = z.object({
@@ -19,4 +27,5 @@ export const MergeDemoDraftSchema = z.object({
 });
 
 export type UpdateDemoDraftDto = z.infer<typeof UpdateDemoDraftSchema>;
+export type GenerateDemoPromptDto = z.infer<typeof GenerateDemoPromptSchema>;
 export type MergeDemoDraftDto = z.infer<typeof MergeDemoDraftSchema>;

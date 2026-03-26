@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { useForm, useFieldArray } from 'react-hook-form';
+import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Card } from '@/components/ui/Card';
@@ -16,22 +16,28 @@ import {
 } from '@/lib/demo-api';
 import { getErrorMessage } from '@/lib/error-utils';
 
-const promptSchema = z.object({
-  name: z.string().min(1, 'Введите название'),
-  body: z.string().min(1, 'Введите текст'),
-  type: z.literal('context'),
-});
+function promptsToBotPrompt(
+  prompts: Array<{ body?: string }> | undefined,
+): string {
+  if (!prompts?.length) return '';
+  return prompts
+    .map((p) => p.body?.trim())
+    .filter((b): b is string => Boolean(b))
+    .join('\n\n');
+}
 
 const demoFormSchema = z.object({
   name: z.string().min(2, 'Название должно содержать минимум 2 символа'),
-  prompts: z.array(promptSchema).default([]),
+  businessDescription: z.string().max(12000).optional().default(''),
+  botPrompt: z.string().max(20000).optional().default(''),
 });
 
 type DemoForm = z.infer<typeof demoFormSchema>;
 
 const defaultFormValues: DemoForm = {
   name: 'Demo bot',
-  prompts: [{ name: 'greeting', body: 'Привет! Я ваш помощник.', type: 'context' }],
+  businessDescription: '',
+  botPrompt: '',
 };
 
 export function DemoPage() {
@@ -41,6 +47,8 @@ export function DemoPage() {
   const [saveError, setSaveError] = useState('');
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [generating, setGenerating] = useState(false);
+  const [genError, setGenError] = useState('');
   const [chatMessages, setChatMessages] = useState<
     Array<{ type: string; content: string; createdAt: string }>
   >([]);
@@ -52,17 +60,12 @@ export function DemoPage() {
   const {
     register,
     handleSubmit,
-    control,
     reset,
+    getValues,
     formState: { errors },
   } = useForm<DemoForm>({
     resolver: zodResolver(demoFormSchema),
     defaultValues: defaultFormValues,
-  });
-
-  const { fields, append, remove } = useFieldArray({
-    control,
-    name: 'prompts',
   });
 
   const ensureDraft = useCallback(async () => {
@@ -72,14 +75,8 @@ export function DemoPage() {
       setDraft(res.data);
       reset({
         name: res.data.name,
-        prompts:
-          res.data.prompts?.length > 0
-            ? res.data.prompts.map((p) => ({
-                name: p.name,
-                body: p.body,
-                type: 'context' as const,
-              }))
-            : defaultFormValues.prompts,
+        businessDescription: res.data.businessDescription ?? '',
+        botPrompt: promptsToBotPrompt(res.data.prompts),
       });
     } catch {
       clearDemoDraftCredentials();
@@ -89,14 +86,8 @@ export function DemoPage() {
       setDraft(me.data);
       reset({
         name: me.data.name,
-        prompts:
-          me.data.prompts?.length > 0
-            ? me.data.prompts.map((p) => ({
-                name: p.name,
-                body: p.body,
-                type: 'context' as const,
-              }))
-            : defaultFormValues.prompts,
+        businessDescription: me.data.businessDescription ?? '',
+        botPrompt: promptsToBotPrompt(me.data.prompts),
       });
     }
   }, [reset]);
@@ -138,16 +129,57 @@ export function DemoPage() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [chatMessages, chatSending]);
 
+  const onGenerate = async () => {
+    setGenError('');
+    const businessDescription = getValues('businessDescription').trim();
+    if (businessDescription.length < 20) {
+      setGenError('Опишите бизнес подробнее (минимум 20 символов).');
+      return;
+    }
+    setGenerating(true);
+    try {
+      const res = await demoApi.generatePrompt({ businessDescription });
+      const { generatedPrompt: _, ...rest } = res.data;
+      setDraft(rest);
+      reset({
+        name: rest.name,
+        businessDescription: rest.businessDescription ?? businessDescription,
+        botPrompt: res.data.generatedPrompt,
+      });
+    } catch (e) {
+      setGenError(getErrorMessage(e, 'Не удалось сгенерировать промпт'));
+    } finally {
+      setGenerating(false);
+    }
+  };
+
   const onSave = async (data: DemoForm) => {
+    const body = data.botPrompt.trim();
+    if (!body) {
+      setSaveError('Сначала сгенерируйте промпт или введите текст вручную.');
+      return;
+    }
     setSaving(true);
     setSaveError('');
     setSaveSuccess(false);
     try {
       const res = await demoApi.updateDraft({
         name: data.name,
-        prompts: data.prompts,
+        businessDescription: data.businessDescription.trim() || undefined,
+        prompts: [
+          {
+            name: 'context',
+            body,
+            type: 'context',
+          },
+        ],
       });
       setDraft(res.data);
+      reset({
+        name: res.data.name,
+        businessDescription: res.data.businessDescription ?? '',
+        botPrompt: promptsToBotPrompt(res.data.prompts),
+      });
       setSaveSuccess(true);
     } catch (e) {
       setSaveError(getErrorMessage(e, 'Не удалось сохранить'));
@@ -230,7 +262,7 @@ export function DemoPage() {
           <div>
             <h1 className="text-xl font-bold text-gray-900">Демо настроек бота</h1>
             <p className="text-sm text-gray-600 mt-0.5">
-              Без токена и выбора мессенджера — как в кабинете, только черновик
+              Опишите бизнес → сгенерируйте промпт → поправьте при необходимости и сохраните
             </p>
           </div>
           <Link
@@ -254,53 +286,62 @@ export function DemoPage() {
                 {...register('name')}
               />
 
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <label className="block text-sm font-medium text-gray-700">
-                    Промпты (контекст для бота)
-                  </label>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => append({ name: '', body: '', type: 'context' })}
-                  >
-                    + Добавить промпт
-                  </Button>
-                </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Чем занимается бизнес
+                </label>
+                <p className="text-xs text-gray-500 mb-2">
+                  Кратко: ниша, продукт, для кого клиенты. По этому тексту модель предложит, что спрашивать у
+                  посетителей.
+                </p>
+                <textarea
+                  placeholder="Например: интернет-магазин детской одежды, доставка по России, средний чек…"
+                  className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all min-h-[120px] ${
+                    errors.businessDescription ? 'border-red-500' : 'border-gray-300'
+                  }`}
+                  rows={5}
+                  {...register('businessDescription')}
+                />
+                {errors.businessDescription && (
+                  <p className="text-sm text-red-600 mt-1">{errors.businessDescription.message}</p>
+                )}
+              </div>
 
-                {fields.map((field, index) => (
-                  <div key={field.id} className="p-4 border-2 border-gray-200 rounded-lg space-y-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium text-gray-700">Промпт #{index + 1}</span>
-                      {fields.length > 1 && (
-                        <button
-                          type="button"
-                          onClick={() => remove(index)}
-                          className="text-red-600 hover:text-red-700 text-sm"
-                        >
-                          Удалить
-                        </button>
-                      )}
-                    </div>
-                    <Input
-                      placeholder="Название (например: greeting)"
-                      error={errors.prompts?.[index]?.name?.message}
-                      {...register(`prompts.${index}.name` as const)}
-                    />
-                    <textarea
-                      placeholder="Текст промпта"
-                      className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all ${
-                        errors.prompts?.[index]?.body ? 'border-red-500' : 'border-gray-300'
-                      }`}
-                      rows={3}
-                      {...register(`prompts.${index}.body` as const)}
-                    />
-                    {errors.prompts?.[index]?.body && (
-                      <p className="text-sm text-red-600">{errors.prompts[index]?.body?.message}</p>
-                    )}
-                  </div>
-                ))}
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={onGenerate}
+                  isLoading={generating}
+                  disabled={generating}
+                >
+                  Сгенерировать промпт
+                </Button>
+              </div>
+
+              {genError && (
+                <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm">{genError}</div>
+              )}
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Промпт для бота
+                </label>
+                <p className="text-xs text-gray-500 mb-2">
+                  После генерации можно отредактировать вручную. Этот текст пойдёт в контекст бота и в тестовый чат
+                  справа.
+                </p>
+                <textarea
+                  placeholder="Нажмите «Сгенерировать промпт» или вставьте свой текст…"
+                  className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all min-h-[180px] font-mono text-sm ${
+                    errors.botPrompt ? 'border-red-500' : 'border-gray-300'
+                  }`}
+                  rows={10}
+                  {...register('botPrompt')}
+                />
+                {errors.botPrompt && (
+                  <p className="text-sm text-red-600 mt-1">{errors.botPrompt.message}</p>
+                )}
               </div>
 
               {saveError && (
@@ -312,7 +353,7 @@ export function DemoPage() {
                   role="status"
                   className="bg-emerald-50 border border-emerald-200 text-emerald-800 px-3 py-2.5 rounded-lg text-sm font-medium"
                 >
-                  Всё сохранено
+                  Сохранено — можно тестировать чат
                 </div>
               )}
 
@@ -323,65 +364,63 @@ export function DemoPage() {
           </Card>
 
           <Card className="flex flex-col h-[min(520px,calc(100vh-24rem))] min-h-[320px] p-0 overflow-hidden">
-              <div className="flex-1 overflow-y-auto p-4 space-y-3">
-                {chatMessages.length === 0 && (
-                  <p className="text-sm text-gray-500 text-center py-8">
-                    Напишите сообщение — ответ появится здесь.
-                  </p>
-                )}
-                {chatMessages.map((m, i) => (
+            <div className="flex-1 overflow-y-auto p-4 space-y-3">
+              {chatMessages.length === 0 && (
+                <p className="text-sm text-gray-500 text-center py-8">
+                  Сохраните промпт слева — затем напишите сообщение, ответ появится здесь.
+                </p>
+              )}
+              {chatMessages.map((m, i) => (
+                <div
+                  key={`${m.createdAt}-${i}`}
+                  className={`flex ${m.type === 'user' ? 'justify-end' : 'justify-start'}`}
+                >
                   <div
-                    key={`${m.createdAt}-${i}`}
-                    className={`flex ${m.type === 'user' ? 'justify-end' : 'justify-start'}`}
+                    className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm ${
+                      m.type === 'user'
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-gray-100 text-gray-900 border border-gray-200'
+                    }`}
                   >
-                    <div
-                      className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm ${
-                        m.type === 'user'
-                          ? 'bg-blue-600 text-white'
-                          : 'bg-gray-100 text-gray-900 border border-gray-200'
-                      }`}
-                    >
-                      <div className="whitespace-pre-wrap break-words">{m.content}</div>
-                    </div>
+                    <div className="whitespace-pre-wrap break-words">{m.content}</div>
                   </div>
-                ))}
-                {chatSending && (
-                  <div className="flex justify-start">
-                    <div className="bg-gray-100 border border-gray-200 rounded-2xl px-4 py-2.5 text-sm text-gray-500">
-                      Печатает…
-                    </div>
+                </div>
+              ))}
+              {chatSending && (
+                <div className="flex justify-start">
+                  <div className="bg-gray-100 border border-gray-200 rounded-2xl px-4 py-2.5 text-sm text-gray-500">
+                    Печатает…
                   </div>
-                )}
-                <div ref={messagesEndRef} />
-              </div>
-
-              {chatError && (
-                <div className="px-4 py-2 bg-red-50 border-t border-red-100 text-red-700 text-sm">
-                  {chatError}
                 </div>
               )}
+              <div ref={messagesEndRef} />
+            </div>
 
-              <div className="p-4 border-t border-gray-200 bg-white">
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={chatInput}
-                    onChange={(e) => setChatInput(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && !e.shiftKey) {
-                        e.preventDefault();
-                        onSendChat();
-                      }
-                    }}
-                    placeholder="Сообщение боту…"
-                    className="flex-1 px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    disabled={chatSending}
-                  />
-                  <Button onClick={onSendChat} disabled={chatSending || !chatInput.trim()} isLoading={chatSending}>
-                    Отправить
-                  </Button>
-                </div>
+            {chatError && (
+              <div className="px-4 py-2 bg-red-50 border-t border-red-100 text-red-700 text-sm">{chatError}</div>
+            )}
+
+            <div className="p-4 border-t border-gray-200 bg-white">
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={chatInput}
+                  onChange={(e) => setChatInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      onSendChat();
+                    }
+                  }}
+                  placeholder="Сообщение боту…"
+                  className="flex-1 px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  disabled={chatSending}
+                />
+                <Button onClick={onSendChat} disabled={chatSending || !chatInput.trim()} isLoading={chatSending}>
+                  Отправить
+                </Button>
               </div>
+            </div>
           </Card>
         </div>
 

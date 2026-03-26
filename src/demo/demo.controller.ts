@@ -17,8 +17,10 @@ import type { CurrentUserData } from '../auth/decorators/current-user.decorator'
 import { ZodValidationPipe } from '../customer/pipes/zod-validation.pipe';
 import { DemoChatSendSchema, type DemoChatSendDto } from './dto/demo-chat.dto';
 import {
+  GenerateDemoPromptSchema,
   MergeDemoDraftSchema,
   UpdateDemoDraftSchema,
+  type GenerateDemoPromptDto,
   type MergeDemoDraftDto,
   type UpdateDemoDraftDto,
 } from './dto/demo-draft.dto';
@@ -123,6 +125,31 @@ export class DemoController {
       success: true,
       data,
       message: 'Demo draft retrieved',
+    };
+  }
+
+  /**
+   * Сгенерировать черновик промпта по описанию бизнеса (LLM). Промпт в настройках не меняется до PATCH.
+   */
+  @Public()
+  @Post('drafts/me/generate-prompt')
+  @HttpCode(HttpStatus.OK)
+  async generateDemoPrompt(
+    @Req() req: Request,
+    @Body(new ZodValidationPipe(GenerateDemoPromptSchema))
+    body: GenerateDemoPromptDto,
+  ) {
+    const ip = clientIp(req);
+    const creds = readDraftCredentials(req);
+    const data = await this.demoDraftService.generatePromptFromBusiness(
+      creds,
+      ip,
+      body,
+    );
+    return {
+      success: true,
+      data,
+      message: 'Prompt draft generated',
     };
   }
 
