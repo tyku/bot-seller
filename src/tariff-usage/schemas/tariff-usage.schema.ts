@@ -32,4 +32,3 @@ export class TariffUsage {
 
 export const TariffUsageSchema = SchemaFactory.createForClass(TariffUsage);
 TariffUsageSchema.index({ customerId: 1, tariffId: 1 }, { unique: true });
-TariffUsageSchema.index({ customerId: 1 });

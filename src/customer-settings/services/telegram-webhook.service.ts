@@ -1,5 +1,7 @@
 import { Injectable, Logger, BadGatewayException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import axios from 'axios';
+import type { TelegramBotApiResponse } from '../../common/telegram-bot-api.types';
 
 @Injectable()
 export class TelegramWebhookService {
@@ -29,22 +31,19 @@ export class TelegramWebhookService {
 
     this.logger.log(`Registering webhook for bot ${botId}: ${webhookUrl}`);
 
-    let result: any;
+    let result: TelegramBotApiResponse;
     try {
-      const response = await fetch(
+      const { data } = await axios.post<TelegramBotApiResponse>(
         `https://api.telegram.org/bot${botToken}/setWebhook`,
         {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            url: webhookUrl,
-            secret_token: secretToken,
-            allowed_updates: ['message', 'edited_message', 'callback_query'],
-            max_connections: 40,
-          }),
+          url: webhookUrl,
+          secret_token: secretToken,
+          allowed_updates: ['message', 'edited_message', 'callback_query'],
+          max_connections: 40,
         },
+        { headers: { 'Content-Type': 'application/json' } },
       );
-      result = await response.json();
+      result = data;
     } catch (error) {
       this.logger.error(`setWebhook network error for bot ${botId}: ${error.message}`);
       throw new BadGatewayException('Не удалось связаться с Telegram API');
@@ -69,11 +68,10 @@ export class TelegramWebhookService {
     this.logger.log('Deleting Telegram webhook');
 
     try {
-      const response = await fetch(
+      const { data: result } = await axios.post<TelegramBotApiResponse>(
         `https://api.telegram.org/bot${botToken}/deleteWebhook`,
-        { method: 'POST' },
+        {},
       );
-      const result = await response.json();
       if (!result.ok) {
         this.logger.warn(`deleteWebhook failed: ${result.description}`);
       }

@@ -67,6 +67,4 @@ export class CustomerSettings {
 }
 
 export const CustomerSettingsSchema = SchemaFactory.createForClass(CustomerSettings);
-
 // Create index for efficient queries
-CustomerSettingsSchema.index({ customerId: 1 });

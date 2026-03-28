@@ -33,7 +33,7 @@ export class CustomerSettingsDraft {
   @Prop()
   normalizedPrompt?: string;
 
-  @Prop({ required: true, index: true })
+  @Prop({ required: true })
   expiresAt: Date;
 
   @Prop()

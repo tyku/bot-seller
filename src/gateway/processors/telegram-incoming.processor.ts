@@ -1,6 +1,7 @@
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Logger } from '@nestjs/common';
 import { Job } from 'bullmq';
+import axios from 'axios';
 import { CustomerSettingsRepository } from '../../customer-settings/customer-settings.repository';
 import { UserService } from '../../user/user.service';
 import { ConversationsService } from '../../conversations/conversations.service';
@@ -14,6 +15,7 @@ import type {
   TelegramIncomingJob,
   TelegramUpdate,
 } from '../interfaces/telegram-update.interface';
+import type { TelegramBotApiResponse } from '../../common/telegram-bot-api.types';
 
 const LIMITS_MESSAGE = 'Лимиты закончились.';
 
@@ -243,19 +245,15 @@ export class TelegramIncomingProcessor extends WorkerHost {
   ): Promise<void> {
     try {
       const html = this.markdownToTelegramHtml(text);
-      const res = await fetch(
+      const { data: result } = await axios.post<TelegramBotApiResponse>(
         `https://api.telegram.org/bot${token}/sendMessage`,
         {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            chat_id: chatId,
-            text: html,
-            parse_mode: 'HTML',
-          }),
+          chat_id: chatId,
+          text: html,
+          parse_mode: 'HTML',
         },
+        { headers: { 'Content-Type': 'application/json' } },
       );
-      const result = await res.json();
 
       if (!result.ok) {
         this.logger.error(`sendMessage failed: ${result.description}`);

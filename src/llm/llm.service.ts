@@ -1,5 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import axios from 'axios';
+import { text } from 'node:stream/consumers';
+import type { Readable } from 'node:stream';
 import { type LlmModelId } from './constants';
 import { SystemPromptService } from './system-prompt.service';
 import { sanitizeText } from '../common/pii-sanitizer';
@@ -98,42 +101,54 @@ export class LlmService {
       return 'Принял! Скоро тут будет умный ответ. (LLM не настроен.)';
     }
 
+    let requestStartedAt: number | undefined;
     try {
       const payload = {
         model,
         messages: enrichedMessages.map((m) => ({
           role: m.role,
-            content: m.content,
+          content: m.content,
         })),
-        stream: false,
+        stream: true,
       };
       this.logger.log(
         `OpenRouter request: model=${payload.model}, messages=${JSON.stringify(payload.messages)}`,
       );
 
-      const response = await fetch(OPENROUTER_URL, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${this.apiKey}`,
-          'Content-Type': 'application/json',
-          'HTTP-Referer': this.configService.get<string>('gateway.baseUrl') ?? '',
-          'X-OpenRouter-Title': 'bot-seller',
+      requestStartedAt = performance.now();
+
+      this.logger.log(`OpenRouter request started at ${Date.now()}ms (model=${model})`);
+
+
+      const response = await axios.post<Readable>(
+        OPENROUTER_URL,
+        payload,
+        {
+          headers: {
+            Authorization: `Bearer ${this.apiKey}`,
+            'Content-Type': 'application/json',
+            'HTTP-Referer':
+              this.configService.get<string>('gateway.baseUrl') ?? '',
+            'X-OpenRouter-Title': 'bot-seller',
+          },
+          responseType: 'stream',
+          validateStatus: () => true,
         },
-        body: JSON.stringify(payload),
-      });
+      );
 
-
-      if (!response.ok) {
-        const text = await response.text();
-        this.logger.error(`OpenRouter error ${response.status}: ${text}`);
+      if (response.status >= 400) {
+        const errBody = await text(response.data);
+        const elapsedMs = Math.round(performance.now() - requestStartedAt);
+        this.logger.error(
+          `OpenRouter error ${response.status}: ${errBody} (${elapsedMs}ms)`,
+        );
         return 'Извините, не удалось обработать запрос. Попробуйте позже.';
       }
 
-      const data = (await response.json()) as {
-        choices?: Array<{ message?: { content?: string } }>;
-      };
-      const raw = data.choices?.[0]?.message?.content?.trim();
-      if (raw == null) return 'Нет ответа от модели.';
+      const raw = (await this.readOpenRouterStream(response.data)).trim();
+      const elapsedMs = Math.round(performance.now() - requestStartedAt);
+      this.logger.log(`OpenRouter request finished in ${elapsedMs}ms (model=${model})`);
+      if (!raw) return 'Нет ответа от модели.';
 
       // Системный промпт требует формат { answer: string } — достаём answer.
       try {
@@ -146,8 +161,69 @@ export class LlmService {
       }
       return raw;
     } catch (error) {
-      this.logger.error(`OpenRouter request failed: ${(error as Error).message}`);
+      const suffix =
+        requestStartedAt != null
+          ? ` after ${Math.round(performance.now() - requestStartedAt)}ms`
+          : '';
+      this.logger.error(
+        `OpenRouter request failed${suffix}: ${(error as Error).message}`,
+      );
       return 'Извините, произошла ошибка при обработке. Попробуйте позже.';
     }
+  }
+
+  private async readOpenRouterStream(stream: Readable): Promise<string> {
+    const decoder = new TextDecoder('utf-8');
+    let buffer = '';
+    let result = '';
+
+    for await (const chunk of stream) {
+      buffer += decoder.decode(
+        typeof chunk === 'string' ? Buffer.from(chunk) : chunk,
+        { stream: true },
+      );
+      const lines = buffer.split('\n');
+      buffer = lines.pop() ?? '';
+
+      for (const line of lines) {
+        const trimmedLine = line.trim();
+        if (!trimmedLine.startsWith('data:')) continue;
+
+        const payload = trimmedLine.slice(5).trim();
+        if (!payload || payload === '[DONE]') continue;
+
+        try {
+          const parsed = JSON.parse(payload) as {
+            choices?: Array<{ delta?: { content?: string } }>;
+          };
+          const token = parsed.choices?.[0]?.delta?.content;
+          if (typeof token === 'string') {
+            result += token;
+          }
+        } catch {
+          // Ignore malformed chunks and continue stream parsing.
+        }
+      }
+    }
+
+    const tail = buffer.trim();
+    if (tail.startsWith('data:')) {
+      const payload = tail.slice(5).trim();
+      if (payload && payload !== '[DONE]') {
+        try {
+          const parsed = JSON.parse(payload) as {
+            choices?: Array<{ delta?: { content?: string } }>;
+          };
+          const token = parsed.choices?.[0]?.delta?.content;
+          if (typeof token === 'string') {
+            result += token;
+          }
+        } catch {
+          // Ignore malformed tail chunk.
+        }
+      }
+    }
+
+    return result;
   }
 }
