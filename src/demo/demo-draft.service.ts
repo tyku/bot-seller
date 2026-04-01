@@ -3,9 +3,12 @@ import {
   UnauthorizedException,
   NotFoundException,
   BadRequestException,
+  ForbiddenException,
   Logger,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
 import { randomUUID, randomBytes } from 'crypto';
 import * as bcrypt from 'bcryptjs';
 import { DemoDraftRepository } from './demo-draft.repository';
@@ -27,10 +30,28 @@ import {
   ConversationMessageType,
   ConversationPlatform,
 } from '../conversations/schemas/conversation.schema';
+import {
+  DEMO_GENERATE_PROMPT_JOB,
+  DEMO_GENERATE_PROMPT_QUEUE,
+} from './constants/demo-generate-prompt.constants';
+import type { DemoGeneratePromptJobData } from './interfaces/demo-generate-prompt-job.interface';
 
 export interface DraftCredentials {
   draftId: string;
   secret: string;
+}
+
+export interface DemoGeneratePromptJobResult {
+  generatedPrompt: string;
+  draftId: string;
+  name: string;
+  botType: BotType;
+  prompts: Array<{ name: string; body: string; type: 'context' }>;
+  businessDescription?: string;
+  normalizedPrompt?: string;
+  expiresAt: Date;
+  createdAt?: Date;
+  updatedAt?: Date;
 }
 
 @Injectable()
@@ -47,6 +68,11 @@ export class DemoDraftService {
     private readonly customerTariffsService: CustomerTariffsService,
     private readonly conversationsService: ConversationsService,
     private readonly conversationReplyService: ConversationReplyService,
+    @InjectQueue(DEMO_GENERATE_PROMPT_QUEUE)
+    private readonly generatePromptQueue: Queue<
+      DemoGeneratePromptJobData,
+      DemoGeneratePromptJobResult
+    >,
   ) {}
 
   private ttlMs(): number {
@@ -145,23 +171,14 @@ export class DemoDraftService {
     return this.mapPublic(updated);
   }
 
-  /** Генерация черновика промпта по описанию бизнеса (без сохранения в prompts до «Сохранить»). */
-  async generatePromptFromBusiness(
+  /**
+   * Поставить в очередь генерацию промпта (LLM в воркере BullMQ).
+   */
+  async enqueueGeneratePrompt(
     creds: DraftCredentials | null,
     clientIp: string,
     dto: GenerateDemoPromptDto,
-  ): Promise<{
-    generatedPrompt: string;
-    draftId: string;
-    name: string;
-    botType: BotType;
-    prompts: Array<{ name: string; body: string; type: 'context' }>;
-    businessDescription?: string;
-    normalizedPrompt?: string;
-    expiresAt: Date;
-    createdAt?: Date;
-    updatedAt?: Date;
-  }> {
+  ): Promise<{ jobId: string }> {
     const draft = await this.loadAuthorizedDraft(creds, clientIp, 'rw');
     await this.rateLimit.consume(
       `generate:${clientIp}:${draft.draftId}`,
@@ -169,15 +186,44 @@ export class DemoDraftService {
       this.rateLimit.getReadWriteLimitPerMinute(),
     );
 
+    const job = await this.generatePromptQueue.add(
+      DEMO_GENERATE_PROMPT_JOB,
+      {
+        draftId: draft.draftId,
+        secret: creds!.secret,
+        businessDescription: dto.businessDescription.trim(),
+      },
+      {
+        removeOnComplete: { count: 300 },
+        removeOnFail: { count: 100 },
+      },
+    );
+
+    const jobId = job.id;
+    if (jobId == null || jobId === '') {
+      throw new BadRequestException('Не удалось поставить задачу в очередь');
+    }
+    return { jobId: String(jobId) };
+  }
+
+  /** Выполняется воркером очереди. */
+  async processGeneratePromptJob(
+    data: DemoGeneratePromptJobData,
+  ): Promise<DemoGeneratePromptJobResult> {
+    await this.assertDraftCredentials({
+      draftId: data.draftId,
+      secret: data.secret,
+    });
+
     const generatedPrompt =
       await this.llmService.generatePromptFromBusinessDescription(
-        dto.businessDescription,
+        data.businessDescription,
       );
 
     const now = Date.now();
     const newExpires = new Date(now + this.ttlMs());
-    const updated = await this.repository.updateByDraftId(draft.draftId, {
-      businessDescription: dto.businessDescription.trim(),
+    const updated = await this.repository.updateByDraftId(data.draftId, {
+      businessDescription: data.businessDescription.trim(),
       expiresAt: newExpires,
     });
 
@@ -189,6 +235,81 @@ export class DemoDraftService {
       generatedPrompt,
       ...this.mapPublic(updated),
     };
+  }
+
+  async getGeneratePromptJobStatus(
+    creds: DraftCredentials | null,
+    jobId: string,
+  ): Promise<
+    | {
+        state:
+          | 'waiting'
+          | 'active'
+          | 'delayed'
+          | 'paused'
+          | 'prioritized'
+          | 'unknown'
+          | 'waiting-children';
+      }
+    | { state: 'completed'; data: DemoGeneratePromptJobResult }
+    | { state: 'failed'; error: string }
+  > {
+    const draft = await this.assertDraftCredentials(creds);
+    const job = await this.generatePromptQueue.getJob(jobId);
+    if (!job) {
+      throw new NotFoundException('Задача не найдена');
+    }
+    if (job.data.draftId !== draft.draftId) {
+      throw new ForbiddenException();
+    }
+
+    const state = await job.getState();
+    if (state === 'completed') {
+      const rv = job.returnvalue as DemoGeneratePromptJobResult | undefined;
+      if (!rv) {
+        return { state: 'failed', error: 'Пустой результат задачи' };
+      }
+      return { state: 'completed', data: rv };
+    }
+    if (state === 'failed') {
+      return {
+        state: 'failed',
+        error: job.failedReason ?? 'Ошибка генерации',
+      };
+    }
+    return {
+      state: state as
+        | 'waiting'
+        | 'active'
+        | 'delayed'
+        | 'paused'
+        | 'prioritized'
+        | 'unknown'
+        | 'waiting-children',
+    };
+  }
+
+  private async assertDraftCredentials(
+    creds: DraftCredentials | null,
+  ): Promise<CustomerSettingsDraftDocument> {
+    if (!creds?.draftId || !creds.secret) {
+      throw new UnauthorizedException('Demo draft credentials required');
+    }
+
+    const draft = await this.repository.findByDraftId(creds.draftId);
+    if (!draft) {
+      throw new NotFoundException('Draft not found or expired');
+    }
+    if (draft.expiresAt.getTime() < Date.now()) {
+      throw new BadRequestException('Draft has expired');
+    }
+
+    const ok = await bcrypt.compare(creds.secret, draft.secretHash);
+    if (!ok) {
+      throw new UnauthorizedException('Invalid draft credentials');
+    }
+
+    return draft;
   }
 
   async mergeDraft(user: CurrentUserData, dto: MergeDemoDraftDto) {

@@ -138,14 +138,40 @@ export function DemoPage() {
     }
     setGenerating(true);
     try {
-      const res = await demoApi.generatePrompt({ businessDescription });
-      const { generatedPrompt: _, ...rest } = res.data;
-      setDraft(rest);
-      reset({
-        name: rest.name,
-        businessDescription: rest.businessDescription ?? businessDescription,
-        botPrompt: res.data.generatedPrompt,
-      });
+      const enqueued = await demoApi.enqueueGeneratePrompt({ businessDescription });
+      const jobId = enqueued.data.jobId;
+      const pollMs = 800;
+      const maxWaitMs = 5 * 60 * 1000;
+      const deadline = Date.now() + maxWaitMs;
+
+      while (Date.now() < deadline) {
+        const res = await demoApi.getGeneratePromptJob(jobId);
+        const payload = res.data;
+
+        if (payload.state === 'completed') {
+          const { generatedPrompt, ...rest } = payload.data;
+          const expiresAt =
+            typeof rest.expiresAt === 'string'
+              ? rest.expiresAt
+              : new Date(rest.expiresAt as unknown as string).toISOString();
+          setDraft({ ...rest, expiresAt });
+          reset({
+            name: rest.name,
+            businessDescription: rest.businessDescription ?? businessDescription,
+            botPrompt: generatedPrompt,
+          });
+          return;
+        }
+
+        if (payload.state === 'failed') {
+          setGenError(payload.error || 'Не удалось сгенерировать промпт');
+          return;
+        }
+
+        await new Promise((r) => setTimeout(r, pollMs));
+      }
+
+      setGenError('Превышено время ожидания. Попробуйте ещё раз.');
     } catch (e) {
       setGenError(getErrorMessage(e, 'Не удалось сгенерировать промпт'));
     } finally {
@@ -300,6 +326,7 @@ export function DemoPage() {
                     errors.businessDescription ? 'border-red-500' : 'border-gray-300'
                   }`}
                   rows={5}
+                  disabled={generating}
                   {...register('businessDescription')}
                 />
                 {errors.businessDescription && (
@@ -312,7 +339,6 @@ export function DemoPage() {
                   type="button"
                   variant="outline"
                   onClick={onGenerate}
-                  isLoading={generating}
                   disabled={generating}
                 >
                   Сгенерировать промпт
@@ -331,14 +357,47 @@ export function DemoPage() {
                   После генерации можно отредактировать вручную. Этот текст пойдёт в контекст бота и в тестовый чат
                   справа.
                 </p>
-                <textarea
-                  placeholder="Нажмите «Сгенерировать промпт» или вставьте свой текст…"
-                  className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all min-h-[180px] font-mono text-sm ${
-                    errors.botPrompt ? 'border-red-500' : 'border-gray-300'
-                  }`}
-                  rows={10}
-                  {...register('botPrompt')}
-                />
+                <div className="relative">
+                  <textarea
+                    placeholder="Нажмите «Сгенерировать промпт» или вставьте свой текст…"
+                    className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all min-h-[180px] font-mono text-sm ${
+                      errors.botPrompt ? 'border-red-500' : 'border-gray-300'
+                    }`}
+                    rows={10}
+                    disabled={generating}
+                    {...register('botPrompt')}
+                  />
+                  {generating && (
+                    <div
+                      className="absolute inset-0 flex flex-col items-center justify-center bg-white/75 backdrop-blur-[1px] rounded-lg z-10 pointer-events-none"
+                      aria-live="polite"
+                      aria-busy="true"
+                    >
+                      <svg
+                        className="animate-spin h-8 w-8 text-blue-600 mb-2"
+                        xmlns="http://www.w3.org/2000/svg"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        aria-hidden
+                      >
+                        <circle
+                          className="opacity-25"
+                          cx="12"
+                          cy="12"
+                          r="10"
+                          stroke="currentColor"
+                          strokeWidth="4"
+                        />
+                        <path
+                          className="opacity-75"
+                          fill="currentColor"
+                          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                        />
+                      </svg>
+                      <span className="text-sm font-medium text-gray-700">Готовим текст</span>
+                    </div>
+                  )}
+                </div>
                 {errors.botPrompt && (
                   <p className="text-sm text-red-600 mt-1">{errors.botPrompt.message}</p>
                 )}
@@ -357,7 +416,12 @@ export function DemoPage() {
                 </div>
               )}
 
-              <Button type="submit" className="w-full sm:w-auto" isLoading={saving}>
+              <Button
+                type="submit"
+                className="w-full sm:w-auto"
+                isLoading={saving}
+                disabled={generating}
+              >
                 Сохранить настройки
               </Button>
             </form>

@@ -4,6 +4,7 @@ import {
   Get,
   HttpCode,
   HttpStatus,
+  Param,
   Patch,
   Post,
   Req,
@@ -129,7 +130,7 @@ export class DemoController {
   }
 
   /**
-   * Сгенерировать черновик промпта по описанию бизнеса (LLM). Промпт в настройках не меняется до PATCH.
+   * Поставить в очередь генерацию черновика промпта по описанию бизнеса (LLM в воркере).
    */
   @Public()
   @Post('drafts/me/generate-prompt')
@@ -141,7 +142,7 @@ export class DemoController {
   ) {
     const ip = clientIp(req);
     const creds = readDraftCredentials(req);
-    const data = await this.demoDraftService.generatePromptFromBusiness(
+    const data = await this.demoDraftService.enqueueGeneratePrompt(
       creds,
       ip,
       body,
@@ -149,7 +150,29 @@ export class DemoController {
     return {
       success: true,
       data,
-      message: 'Prompt draft generated',
+      message: 'Generate prompt job enqueued',
+    };
+  }
+
+  /**
+   * Статус задачи генерации промпта (опрос после POST …/generate-prompt).
+   */
+  @Public()
+  @Get('drafts/me/generate-prompt/jobs/:jobId')
+  @HttpCode(HttpStatus.OK)
+  async getGeneratePromptJob(
+    @Req() req: Request,
+    @Param('jobId') jobId: string,
+  ) {
+    const creds = readDraftCredentials(req);
+    const data = await this.demoDraftService.getGeneratePromptJobStatus(
+      creds,
+      jobId,
+    );
+    return {
+      success: true,
+      data,
+      message: 'Generate prompt job status',
     };
   }
 

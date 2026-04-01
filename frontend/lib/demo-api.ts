@@ -88,13 +88,41 @@ export const demoApi = {
     return res.data;
   },
 
-  generatePrompt: async (body: {
+  /** Поставить задачу генерации в очередь; результат — через getGeneratePromptJob. */
+  enqueueGeneratePrompt: async (body: {
     businessDescription: string;
   }): Promise<{
     success: boolean;
-    data: DemoDraftPayload & { generatedPrompt: string };
+    data: { jobId: string };
   }> => {
     const res = await demoClient.post('/demo/drafts/me/generate-prompt', body);
+    return res.data;
+  },
+
+  getGeneratePromptJob: async (
+    jobId: string,
+  ): Promise<{
+    success: boolean;
+    data:
+      | {
+          state:
+            | 'waiting'
+            | 'active'
+            | 'delayed'
+            | 'paused'
+            | 'prioritized'
+            | 'unknown'
+            | 'waiting-children';
+        }
+      | {
+          state: 'completed';
+          data: DemoDraftPayload & { generatedPrompt: string };
+        }
+      | { state: 'failed'; error: string };
+  }> => {
+    const res = await demoClient.get(
+      `/demo/drafts/me/generate-prompt/jobs/${encodeURIComponent(jobId)}`,
+    );
     return res.data;
   },
 
