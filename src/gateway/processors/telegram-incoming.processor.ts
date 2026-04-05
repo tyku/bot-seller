@@ -22,6 +22,7 @@ import type {
   TelegramUpdate,
 } from '../interfaces/telegram-update.interface';
 import type { TelegramBotApiResponse } from '../../common/telegram-bot-api.types';
+import { sendTelegramHtmlMessage } from '../../common/telegram-html-message';
 import { HANDOFF_DEFAULT_USER_MESSAGE } from '../../conversations/handoff-messages';
 
 const LIMITS_MESSAGE = 'Лимиты закончились.';
@@ -128,6 +129,7 @@ export class TelegramIncomingProcessor extends WorkerHost {
 
     await this.addUserMessageToConversation(chatId, botId, userText, {
       normalizedPromptVersion,
+      customerId: !Number.isNaN(customerIdNum) ? customerIdNum : undefined,
     });
 
     const controlMode = await this.conversationsService.getControlMode(
@@ -351,7 +353,7 @@ export class TelegramIncomingProcessor extends WorkerHost {
       );
       if (customer?.telegramId) {
         const notify = `Чат с пользователем перешёл на ручной режим (chat_id: ${userChatIdStr}). Нажмите кнопку, когда можно снова включить ответы бота.`;
-        await this.sendHtmlMessage(token, customer.telegramId, notify, {
+        await sendTelegramHtmlMessage(token, customer.telegramId, notify, {
           replyMarkup: {
             inline_keyboard: [
               [
@@ -456,6 +458,7 @@ export class TelegramIncomingProcessor extends WorkerHost {
     options?: {
       normalizedPromptVersion?: number;
       questionId?: string;
+      customerId?: number;
     },
   ): Promise<void> {
     if (!userText) {
@@ -468,7 +471,11 @@ export class TelegramIncomingProcessor extends WorkerHost {
         String(chatId),
         botId,
         userText,
-        options,
+        {
+          normalizedPromptVersion: options?.normalizedPromptVersion,
+          questionId: options?.questionId,
+          customerId: options?.customerId,
+        },
       );
     } catch (err) {
       this.logger.warn(
@@ -499,56 +506,6 @@ export class TelegramIncomingProcessor extends WorkerHost {
     }
   }
 
-  /**
-   * Конвертирует Markdown (**bold**, ~~strikethrough~~, *italic*, `code`) в HTML для Telegram.
-   * @see https://core.telegram.org/bots/api#html-style
-   */
-  private markdownToTelegramHtml(text: string): string {
-    let out = text
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;');
-    out = out
-      .replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
-      .replace(/__(.+?)__/g, '<b>$1</b>')
-      .replace(/~~(.+?)~~/g, '<s>$1</s>')
-      .replace(/(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)/g, '<i>$1</i>')
-      .replace(/(?<!_)_(?!_)(.+?)(?<!_)_(?!_)/g, '<i>$1</i>')
-      .replace(/`([^`]+)`/g, '<code>$1</code>');
-    return out;
-  }
-
-  private async sendHtmlMessage(
-    token: string,
-    chatId: number,
-    text: string,
-    options?: {
-      replyMarkup?: {
-        inline_keyboard: { text: string; callback_data: string }[][];
-      };
-    },
-  ): Promise<boolean> {
-    const html = this.markdownToTelegramHtml(text);
-    const body: Record<string, unknown> = {
-      chat_id: chatId,
-      text: html,
-      parse_mode: 'HTML',
-    };
-    if (options?.replyMarkup) {
-      body.reply_markup = options.replyMarkup;
-    }
-    const { data: result } = await axios.post<TelegramBotApiResponse>(
-      `https://api.telegram.org/bot${token}/sendMessage`,
-      body,
-      { headers: { 'Content-Type': 'application/json' } },
-    );
-    if (!result.ok) {
-      this.logger.error(`sendMessage (html) failed: ${result.description}`);
-      return false;
-    }
-    return true;
-  }
-
   private async sendReply(
     token: string,
     chatId: number,
@@ -556,9 +513,11 @@ export class TelegramIncomingProcessor extends WorkerHost {
     botId: string,
   ): Promise<void> {
     try {
-      const ok = await this.sendHtmlMessage(token, chatId, text);
-      if (ok) {
+      const result = await sendTelegramHtmlMessage(token, chatId, text);
+      if (result.ok) {
         this.logger.log(`Reply sent to chat ${chatId} for bot ${botId}`);
+      } else {
+        this.logger.error(`sendMessage (html) failed: ${result.description}`);
       }
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);

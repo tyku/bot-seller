@@ -19,6 +19,8 @@ export enum ConversationMessageType {
   USER = 'user',
   ASSISTANT = 'assistant',
   SYSTEM = 'system',
+  /** Сообщение оператора (владельца кабинета) в адрес пользователя канала. */
+  OPERATOR = 'operator',
 }
 
 /** Кто ведёт диалог: LLM или оператор (ручной режим в том же чате). */
@@ -57,6 +59,13 @@ export class Conversation {
   @Prop({ required: true, index: true })
   botId: string;
 
+  /**
+   * Владелец бота (числовой id клиента). Для фильтрации inbox и проверки доступа.
+   * Демо-диалоги (`demo:*`) и тестовый контур без привязки могут не иметь поля.
+   */
+  @Prop({ index: true })
+  customerId?: number;
+
   @Prop({ enum: ConversationType, default: ConversationType.DEFAULT })
   type: ConversationType;
 
@@ -88,3 +97,5 @@ ConversationSchema.index(
   { botId: 1, platform: 1, chatId: 1 },
   { unique: true },
 );
+
+ConversationSchema.index({ customerId: 1, updatedAt: -1 });

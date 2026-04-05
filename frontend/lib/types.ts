@@ -1,6 +1,11 @@
 export type WizardStep = 'register' | 'verify' | 'profile';
 
-export type ProfileTab = 'bots' | 'organization' | 'subscription' | 'debug';
+export type ProfileTab =
+  | 'bots'
+  | 'organization'
+  | 'subscription'
+  | 'debug'
+  | 'inbox';
 
 export interface User {
   id: string;

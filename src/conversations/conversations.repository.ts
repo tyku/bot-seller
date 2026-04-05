@@ -38,6 +38,7 @@ export class ConversationsRepository {
     botId: string,
     type: ConversationType = ConversationType.DEFAULT,
     normalizedPromptVersion?: number,
+    customerId?: number,
   ): Promise<ConversationDocument> {
     const doc = new this.conversationModel({
       platform,
@@ -45,8 +46,71 @@ export class ConversationsRepository {
       botId,
       type,
       ...(normalizedPromptVersion != null && { normalizedPromptVersion }),
+      ...(customerId != null && { customerId }),
     });
     return doc.save();
+  }
+
+  async setCustomerIdIfMissing(
+    id: string,
+    customerId: number,
+  ): Promise<ConversationDocument | null> {
+    return this.conversationModel
+      .findOneAndUpdate(
+        { _id: id, $or: [{ customerId: { $exists: false } }, { customerId: null }] },
+        { $set: { customerId, updatedAt: new Date() } },
+        { new: true },
+      )
+      .exec();
+  }
+
+  async findInboxPage(
+    customerId: number,
+    options: {
+      platform?: ConversationPlatform;
+      skip: number;
+      limit: number;
+      ownedBotIds: string[];
+    },
+  ): Promise<ConversationDocument[]> {
+    const { platform, skip, limit, ownedBotIds } = options;
+    const filter: Record<string, unknown> = {
+      ...this.inboxBaseFilter(customerId, ownedBotIds, platform),
+    };
+    return this.conversationModel
+      .find(filter)
+      .sort({ updatedAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .exec();
+  }
+
+  async countInbox(
+    customerId: number,
+    platform: ConversationPlatform | undefined,
+    ownedBotIds: string[],
+  ): Promise<number> {
+    const filter = this.inboxBaseFilter(customerId, ownedBotIds, platform);
+    return this.conversationModel.countDocuments(filter).exec();
+  }
+
+  /** Диалоги клиента: по customerId или по списку его botId (в т.ч. старые без customerId). */
+  private inboxBaseFilter(
+    customerId: number,
+    ownedBotIds: string[],
+    platform: ConversationPlatform | undefined,
+  ): Record<string, unknown> {
+    const platformClause = platform
+      ? { platform }
+      : { platform: { $ne: ConversationPlatform.TEST } };
+    return {
+      botId: { $not: /^demo:/ },
+      ...platformClause,
+      $or: [
+        { customerId },
+        ...(ownedBotIds.length > 0 ? [{ botId: { $in: ownedBotIds } }] : []),
+      ],
+    };
   }
 
   async appendMessage(

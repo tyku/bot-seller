@@ -2,7 +2,9 @@ import {
   Controller,
   Post,
   Get,
+  Patch,
   Body,
+  Param,
   Query,
   HttpCode,
   HttpStatus,
@@ -31,6 +33,13 @@ import {
   DebugSendSchema,
   type DebugSendDto,
 } from './dto/debug-send.dto';
+import {
+  InboxControlModeSchema,
+  InboxListQuerySchema,
+  InboxOperatorSendSchema,
+  type InboxListQueryDto,
+  type InboxOperatorSendDto,
+} from './dto/inbox.dto';
 
 @Controller('conversations')
 export class ConversationsController {
@@ -83,7 +92,7 @@ export class ConversationsController {
       chatId,
       botId,
       message,
-      { normalizedPromptVersion },
+      { normalizedPromptVersion, customerId: user.customerId },
     );
 
     const mode = await this.conversationsService.getControlMode(
@@ -223,5 +232,161 @@ export class ConversationsController {
         }),
       },
     };
+  }
+
+  /**
+   * Inbox: все диалоги клиента по каналам (без демо и без тестового platform=test).
+   */
+  @Get('inbox')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  async inboxList(
+    @CurrentUser() user: CurrentUserData,
+    @Query(new ZodValidationPipe(InboxListQuerySchema)) query: InboxListQueryDto,
+  ): Promise<{
+    success: boolean;
+    data: {
+      items: Array<{
+        id: string;
+        platform: string;
+        chatId: string;
+        botId: string;
+        controlMode: string;
+        updatedAt: string;
+      }>;
+      total: number;
+      page: number;
+      limit: number;
+    };
+  }> {
+    const platform =
+      query.platform === 'tg'
+        ? ConversationPlatform.TG
+        : query.platform === 'vk'
+          ? ConversationPlatform.VK
+          : undefined;
+
+    const { items, total } = await this.conversationsService.listInboxForCustomer(
+      user.customerId,
+      { platform, page: query.page, limit: query.limit },
+    );
+
+    return {
+      success: true,
+      data: {
+        items: items.map((c) => ({
+          id: String(c._id),
+          platform: c.platform,
+          chatId: c.chatId,
+          botId: c.botId,
+          controlMode: c.controlMode ?? ConversationControlMode.BOT,
+          updatedAt: (c.updatedAt ?? new Date()).toISOString(),
+        })),
+        total,
+        page: query.page,
+        limit: query.limit,
+      },
+    };
+  }
+
+  @Get('inbox/:id')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  async inboxGetOne(
+    @CurrentUser() user: CurrentUserData,
+    @Param('id') id: string,
+  ): Promise<{
+    success: boolean;
+    data: {
+      id: string;
+      platform: string;
+      chatId: string;
+      botId: string;
+      controlMode: string;
+      normalizedPromptVersion?: number;
+      messages: Array<{
+        type: string;
+        content: string;
+        questionId?: string;
+        createdAt: string;
+      }>;
+    };
+  }> {
+    const doc = await this.conversationsService.findConversationByIdForCustomer(
+      id,
+      user.customerId,
+    );
+    if (!doc) {
+      throw new ForbiddenException('Диалог не найден');
+    }
+
+    const messages = (doc.messages ?? []).map((m) => ({
+      type: m.type,
+      content: m.content,
+      ...(m.questionId != null &&
+        m.questionId !== '' && { questionId: m.questionId }),
+      createdAt: (m.createdAt as Date).toISOString(),
+    }));
+
+    return {
+      success: true,
+      data: {
+        id: String(doc._id),
+        platform: doc.platform,
+        chatId: doc.chatId,
+        botId: doc.botId,
+        controlMode: doc.controlMode ?? ConversationControlMode.BOT,
+        ...(doc.normalizedPromptVersion != null && {
+          normalizedPromptVersion: doc.normalizedPromptVersion,
+        }),
+        messages,
+      },
+    };
+  }
+
+  @Post('inbox/:id/operator-message')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  async inboxOperatorSend(
+    @CurrentUser() user: CurrentUserData,
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(InboxOperatorSendSchema)) dto: InboxOperatorSendDto,
+  ): Promise<{ success: boolean }> {
+    await this.conversationsService.sendOperatorMessageFromInbox(
+      id,
+      user.customerId,
+      dto.message,
+    );
+    return { success: true };
+  }
+
+  @Patch('inbox/:id/control-mode')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  async inboxControlMode(
+    @CurrentUser() user: CurrentUserData,
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(InboxControlModeSchema)) dto: { controlMode: 'bot' | 'operator' },
+  ): Promise<{ success: boolean }> {
+    const doc = await this.conversationsService.findConversationByIdForCustomer(
+      id,
+      user.customerId,
+    );
+    if (!doc) {
+      throw new ForbiddenException('Диалог не найден');
+    }
+
+    const mode =
+      dto.controlMode === 'operator'
+        ? ConversationControlMode.OPERATOR
+        : ConversationControlMode.BOT;
+
+    await this.conversationsService.setControlMode(
+      doc.platform,
+      doc.chatId,
+      doc.botId,
+      mode,
+    );
+    return { success: true };
   }
 }

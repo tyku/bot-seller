@@ -185,6 +185,76 @@ export const usageApi = {
   },
 };
 
+/** Диалоги с реальных каналов (JWT), без демо и без test-контура. */
+export const inboxApi = {
+  list: async (params?: {
+    platform?: 'tg' | 'vk';
+    page?: number;
+    limit?: number;
+  }): Promise<{
+    success: boolean;
+    data: {
+      items: Array<{
+        id: string;
+        platform: string;
+        chatId: string;
+        botId: string;
+        controlMode: string;
+        updatedAt: string;
+      }>;
+      total: number;
+      page: number;
+      limit: number;
+    };
+  }> => {
+    const response = await api.get('/conversations/inbox', { params });
+    return response.data;
+  },
+
+  getOne: async (
+    id: string,
+  ): Promise<{
+    success: boolean;
+    data: {
+      id: string;
+      platform: string;
+      chatId: string;
+      botId: string;
+      controlMode: string;
+      normalizedPromptVersion?: number;
+      messages: Array<{
+        type: string;
+        content: string;
+        questionId?: string;
+        createdAt: string;
+      }>;
+    };
+  }> => {
+    const response = await api.get(`/conversations/inbox/${id}`);
+    return response.data;
+  },
+
+  sendOperator: async (
+    id: string,
+    message: string,
+  ): Promise<{ success: boolean }> => {
+    const response = await api.post(`/conversations/inbox/${id}/operator-message`, {
+      message,
+    });
+    return response.data;
+  },
+
+  setControlMode: async (
+    id: string,
+    controlMode: 'bot' | 'operator',
+  ): Promise<{ success: boolean }> => {
+    const response = await api.patch(`/conversations/inbox/${id}/control-mode`, {
+      controlMode,
+    });
+    return response.data;
+  },
+};
+
 // Debug chat (test dialogue for a bot)
 export const debugChatApi = {
   send: async (
