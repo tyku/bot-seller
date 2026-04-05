@@ -115,17 +115,27 @@ export function InboxSection() {
     loadList();
   }, [loadList]);
 
-  const loadDetail = useCallback(async (id: string) => {
-    setDetailLoading(true);
-    setError('');
+  const loadDetail = useCallback(async (id: string, options?: { silent?: boolean }) => {
+    const silent = options?.silent === true;
+    if (!silent) {
+      setDetailLoading(true);
+      setError('');
+    }
     try {
       const res = await inboxApi.getOne(id);
-      setDetail(res.data);
+      const payload = res.data;
+      if (payload) {
+        setDetail(payload);
+      }
     } catch (err) {
-      setDetail(null);
-      setError(getErrorMessage(err, 'Не удалось загрузить диалог'));
+      if (!silent) {
+        setDetail(null);
+        setError(getErrorMessage(err, 'Не удалось загрузить диалог'));
+      }
     } finally {
-      setDetailLoading(false);
+      if (!silent) {
+        setDetailLoading(false);
+      }
     }
   }, []);
 
@@ -136,6 +146,52 @@ export function InboxSection() {
       setDetail(null);
     }
   }, [selectedId, loadDetail]);
+
+  /** Новые реплики из канала (Telegram и т.д.) без перезагрузки страницы. */
+  useEffect(() => {
+    if (!selectedId) return;
+    const id = selectedId;
+    const interval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') {
+        return;
+      }
+      void loadDetail(id, { silent: true });
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [selectedId, loadDetail]);
+
+  /** Список диалогов и очередь «нужен оператор» без F5. */
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') {
+        return;
+      }
+      void loadList();
+    }, 15000);
+    return () => clearInterval(interval);
+  }, [loadList]);
+
+  useEffect(() => {
+    const onVisibility = () => {
+      if (typeof document === 'undefined' || document.visibilityState !== 'visible') {
+        return;
+      }
+      void loadList();
+      if (selectedId) {
+        void loadDetail(selectedId, { silent: true });
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => document.removeEventListener('visibilitychange', onVisibility);
+  }, [loadList, loadDetail, selectedId]);
+
+  const handleSelectRow = (id: string) => {
+    if (selectedId === id) {
+      void loadDetail(id);
+    } else {
+      setSelectedId(id);
+    }
+  };
 
   const handleSendOperator = async () => {
     const text = operatorText.trim();
@@ -223,7 +279,7 @@ export function InboxSection() {
                   <li key={row.id}>
                     <button
                       type="button"
-                      onClick={() => setSelectedId(row.id)}
+                      onClick={() => handleSelectRow(row.id)}
                       className={`w-full text-left px-4 py-3 text-sm transition-colors ${
                         row.needsOperatorAttention
                           ? `bg-red-50 hover:bg-red-100/90 border-l-4 border-red-500 ${
@@ -301,9 +357,9 @@ export function InboxSection() {
                 </Button>
               </div>
               <div className="flex-1 overflow-y-auto border border-gray-100 rounded-lg p-3 max-h-[320px] space-y-3 mb-4 bg-gray-50/50">
-                {detail.messages.map((m, i) => (
+                {(detail.messages ?? []).map((m, i) => (
                   <div
-                    key={`${m.createdAt}-${i}`}
+                    key={`${m.type}-${m.createdAt}-${i}-${m.content.slice(0, 24)}`}
                     className={`text-sm rounded-lg px-3 py-2 ${
                       m.type === 'operator'
                         ? 'bg-amber-50 border border-amber-100 ml-4'
