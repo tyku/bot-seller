@@ -43,6 +43,7 @@ export function InboxSection() {
       botId: string;
       controlMode: string;
       updatedAt: string;
+      needsOperatorAttention: boolean;
     }>
   >([]);
   const [total, setTotal] = useState(0);
@@ -223,17 +224,38 @@ export function InboxSection() {
                     <button
                       type="button"
                       onClick={() => setSelectedId(row.id)}
-                      className={`w-full text-left px-4 py-3 text-sm hover:bg-gray-50 transition-colors ${
-                        selectedId === row.id ? 'bg-blue-50' : ''
+                      className={`w-full text-left px-4 py-3 text-sm transition-colors ${
+                        row.needsOperatorAttention
+                          ? `bg-red-50 hover:bg-red-100/90 border-l-4 border-red-500 ${
+                              selectedId === row.id ? 'ring-2 ring-inset ring-blue-400' : ''
+                            }`
+                          : `hover:bg-gray-50 ${selectedId === row.id ? 'bg-blue-50' : ''}`
                       }`}
                     >
-                      <div className="font-medium text-gray-900">
+                      <div
+                        className={`font-medium ${
+                          row.needsOperatorAttention ? 'text-red-900' : 'text-gray-900'
+                        }`}
+                      >
                         {platformLabel(row.platform)} · чат {row.chatId}
+                        {row.needsOperatorAttention ? (
+                          <span className="ml-2 text-xs font-semibold text-red-700">
+                            нужен оператор
+                          </span>
+                        ) : null}
                       </div>
-                      <div className="text-gray-600 truncate">
+                      <div
+                        className={`truncate ${
+                          row.needsOperatorAttention ? 'text-red-800/90' : 'text-gray-600'
+                        }`}
+                      >
                         {botNameById[row.botId] ?? row.botId}
                       </div>
-                      <div className="text-xs text-gray-400 mt-0.5">
+                      <div
+                        className={`text-xs mt-0.5 ${
+                          row.needsOperatorAttention ? 'text-red-600' : 'text-gray-400'
+                        }`}
+                      >
                         {row.controlMode === 'operator' ? 'Оператор' : 'Бот'} ·{' '}
                         {new Date(row.updatedAt).toLocaleString()}
                       </div>

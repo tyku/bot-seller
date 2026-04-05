@@ -201,6 +201,7 @@ export const inboxApi = {
         botId: string;
         controlMode: string;
         updatedAt: string;
+        needsOperatorAttention: boolean;
       }>;
       total: number;
       page: number;

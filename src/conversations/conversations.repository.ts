@@ -94,6 +94,26 @@ export class ConversationsRepository {
     return this.conversationModel.countDocuments(filter).exec();
   }
 
+  /** Все диалоги inbox для сортировки в памяти (верхний предел на клиента). */
+  async findInboxAll(
+    customerId: number,
+    options: {
+      platform?: ConversationPlatform;
+      ownedBotIds: string[];
+      max?: number;
+    },
+  ): Promise<ConversationDocument[]> {
+    const max = options.max ?? 10000;
+    const filter: Record<string, unknown> = {
+      ...this.inboxBaseFilter(customerId, options.ownedBotIds, options.platform),
+    };
+    return this.conversationModel
+      .find(filter)
+      .sort({ updatedAt: -1 })
+      .limit(max)
+      .exec();
+  }
+
   /** Диалоги клиента: по customerId или по списку его botId (в т.ч. старые без customerId). */
   private inboxBaseFilter(
     customerId: number,

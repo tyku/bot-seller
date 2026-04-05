@@ -253,6 +253,8 @@ export class ConversationsController {
         botId: string;
         controlMode: string;
         updatedAt: string;
+        /** Очередь Redis: нужен оператор (красная зона в UI). */
+        needsOperatorAttention: boolean;
       }>;
       total: number;
       page: number;
@@ -274,13 +276,14 @@ export class ConversationsController {
     return {
       success: true,
       data: {
-        items: items.map((c) => ({
-          id: String(c._id),
-          platform: c.platform,
-          chatId: c.chatId,
-          botId: c.botId,
-          controlMode: c.controlMode ?? ConversationControlMode.BOT,
-          updatedAt: (c.updatedAt ?? new Date()).toISOString(),
+        items: items.map((row) => ({
+          id: String(row.conversation._id),
+          platform: row.conversation.platform,
+          chatId: row.conversation.chatId,
+          botId: row.conversation.botId,
+          controlMode: row.conversation.controlMode ?? ConversationControlMode.BOT,
+          updatedAt: (row.conversation.updatedAt ?? new Date()).toISOString(),
+          needsOperatorAttention: row.needsOperatorAttention,
         })),
         total,
         page: query.page,
@@ -387,6 +390,21 @@ export class ConversationsController {
       doc.botId,
       mode,
     );
+    if (mode === ConversationControlMode.OPERATOR) {
+      await this.conversationsService.enqueueOperatorAttentionByThread(
+        user.customerId,
+        doc.platform,
+        doc.chatId,
+        doc.botId,
+      );
+    } else {
+      await this.conversationsService.removeOperatorAttentionByThread(
+        user.customerId,
+        doc.platform,
+        doc.chatId,
+        doc.botId,
+      );
+    }
     return { success: true };
   }
 }

@@ -284,6 +284,12 @@ export class TelegramIncomingProcessor extends WorkerHost {
         expectedBotId,
         ConversationControlMode.BOT,
       );
+      await this.conversationsService.removeOperatorAttentionByThread(
+        customerIdNum,
+        ConversationPlatform.TG,
+        userChatIdStr,
+        expectedBotId,
+      );
       await this.conversationsService.addSystemMessage(
         ConversationPlatform.TG,
         userChatIdStr,
@@ -370,6 +376,15 @@ export class TelegramIncomingProcessor extends WorkerHost {
           `Handoff: customer ${customerIdNum} has no telegramId — operator button not sent`,
         );
       }
+    }
+
+    if (!Number.isNaN(customerIdNum)) {
+      await this.conversationsService.enqueueOperatorAttentionByThread(
+        customerIdNum,
+        ConversationPlatform.TG,
+        userChatIdStr,
+        botId,
+      );
     }
   }
 

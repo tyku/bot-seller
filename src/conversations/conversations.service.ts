@@ -15,12 +15,20 @@ import {
   ConversationControlMode,
 } from './schemas/conversation.schema';
 import type { ConversationDocument } from './schemas/conversation.schema';
+import { OperatorInboxQueueService } from './operator-inbox-queue.service';
+
+export type InboxListRow = {
+  conversation: ConversationDocument;
+  /** Диалог в Redis-очереди «нужен оператор» (FIFO, TTL 1 ч). */
+  needsOperatorAttention: boolean;
+};
 
 @Injectable()
 export class ConversationsService {
   constructor(
     private readonly conversationsRepository: ConversationsRepository,
     private readonly customerSettingsRepository: CustomerSettingsRepository,
+    private readonly operatorInboxQueue: OperatorInboxQueueService,
   ) {}
 
   async getOrCreate(
@@ -199,26 +207,113 @@ export class ConversationsService {
     );
   }
 
-  /** Список диалогов для inbox (без демо и без platform=test). */
+  /**
+   * Постановка в Redis-очередь «нужен оператор» (без дублей по времени первой постановки).
+   * Тестовый platform=test в inbox не показывается — очередь для него не ведём.
+   */
+  async enqueueOperatorAttentionByThread(
+    customerId: number,
+    platform: ConversationPlatform,
+    chatId: string,
+    botId: string,
+  ): Promise<void> {
+    if (platform === ConversationPlatform.TEST) {
+      return;
+    }
+    const doc = await this.conversationsRepository.findByPlatformChatAndBot(
+      platform,
+      chatId,
+      botId,
+    );
+    if (!doc) {
+      return;
+    }
+    await this.operatorInboxQueue.enqueueIfMissing(
+      customerId,
+      String(doc._id),
+    );
+  }
+
+  async removeOperatorAttentionByThread(
+    customerId: number,
+    platform: ConversationPlatform,
+    chatId: string,
+    botId: string,
+  ): Promise<void> {
+    if (platform === ConversationPlatform.TEST) {
+      return;
+    }
+    const doc = await this.conversationsRepository.findByPlatformChatAndBot(
+      platform,
+      chatId,
+      botId,
+    );
+    if (!doc) {
+      return;
+    }
+    await this.operatorInboxQueue.remove(customerId, String(doc._id));
+  }
+
+  /** Список диалогов для inbox (без демо и без platform=test). Очередь Redis — сверху, FIFO по времени ожидания. */
   async listInboxForCustomer(
     customerId: number,
     options: { platform?: ConversationPlatform; page: number; limit: number },
-  ): Promise<{ items: ConversationDocument[]; total: number }> {
+  ): Promise<{ items: InboxListRow[]; total: number }> {
     const { platform, page, limit } = options;
     const skip = page * limit;
     const settings = await this.customerSettingsRepository.findByCustomerId(
       String(customerId),
     );
     const ownedBotIds = settings.map((s) => String(s._id));
-    const [items, total] = await Promise.all([
-      this.conversationsRepository.findInboxPage(customerId, {
+
+    const priorityIds =
+      await this.operatorInboxQueue.cleanupAndGetOrderedConversationIds(
+        customerId,
+      );
+
+    const [all, total] = await Promise.all([
+      this.conversationsRepository.findInboxAll(customerId, {
         platform,
-        skip,
-        limit,
         ownedBotIds,
       }),
       this.conversationsRepository.countInbox(customerId, platform, ownedBotIds),
     ]);
+
+    const byId = new Map<string, ConversationDocument>();
+    for (const c of all) {
+      byId.set(String(c._id), c);
+    }
+
+    const priorityOrdered: ConversationDocument[] = [];
+    for (const id of priorityIds) {
+      const doc = byId.get(id);
+      if (doc) {
+        priorityOrdered.push(doc);
+      }
+    }
+
+    const prioritySet = new Set(priorityOrdered.map((c) => String(c._id)));
+    const rest = all
+      .filter((c) => !prioritySet.has(String(c._id)))
+      .sort((a, b) => {
+        const ta = (a.updatedAt ?? new Date(0)).getTime();
+        const tb = (b.updatedAt ?? new Date(0)).getTime();
+        return tb - ta;
+      });
+
+    const sorted: InboxListRow[] = [
+      ...priorityOrdered.map((conversation) => ({
+        conversation,
+        needsOperatorAttention: true,
+      })),
+      ...rest.map((conversation) => ({
+        conversation,
+        needsOperatorAttention: false,
+      })),
+    ];
+
+    const items = sorted.slice(skip, skip + limit);
+
     return { items, total };
   }
 

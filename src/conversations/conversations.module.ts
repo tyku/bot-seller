@@ -8,6 +8,7 @@ import { ConversationsRepository } from './conversations.repository';
 import { ConversationsService } from './conversations.service';
 import { ConversationReplyService } from './conversation-reply.service';
 import { ConversationHandoffService } from './conversation-handoff.service';
+import { OperatorInboxQueueService } from './operator-inbox-queue.service';
 import { ConversationsController } from './conversations.controller';
 import { CustomerSettingsModule } from '../customer-settings/customer-settings.module';
 import { LlmModule } from '../llm/llm.module';
@@ -23,6 +24,7 @@ import { LlmModule } from '../llm/llm.module';
   controllers: [ConversationsController],
   providers: [
     ConversationsRepository,
+    OperatorInboxQueueService,
     ConversationsService,
     ConversationReplyService,
     ConversationHandoffService,
@@ -32,6 +34,7 @@ import { LlmModule } from '../llm/llm.module';
     ConversationsRepository,
     ConversationReplyService,
     ConversationHandoffService,
+    OperatorInboxQueueService,
   ],
 })
 export class ConversationsModule {}
