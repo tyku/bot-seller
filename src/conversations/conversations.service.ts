@@ -5,6 +5,7 @@ import {
   ConversationType,
   ConversationMessageType,
   ConversationMessage,
+  ConversationControlMode,
 } from './schemas/conversation.schema';
 
 @Injectable()
@@ -126,5 +127,36 @@ export class ConversationsService {
       messages: conversation.messages ?? [],
       normalizedPromptVersion: conversation.normalizedPromptVersion,
     };
+  }
+
+  /** Текущий режим ведения диалога; для старых документов без поля — бот. */
+  async getControlMode(
+    platform: ConversationPlatform,
+    chatId: string,
+    botId: string,
+  ): Promise<ConversationControlMode> {
+    const conversation =
+      await this.conversationsRepository.findByPlatformChatAndBot(
+        platform,
+        chatId,
+        botId,
+      );
+    return (
+      conversation?.controlMode ?? ConversationControlMode.BOT
+    );
+  }
+
+  async setControlMode(
+    platform: ConversationPlatform,
+    chatId: string,
+    botId: string,
+    controlMode: ConversationControlMode,
+  ): Promise<void> {
+    await this.conversationsRepository.setControlMode(
+      platform,
+      chatId,
+      botId,
+      controlMode,
+    );
   }
 }

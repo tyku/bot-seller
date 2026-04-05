@@ -17,9 +17,20 @@ import { ConversationsService } from './conversations.service';
 import { ConversationReplyService } from './conversation-reply.service';
 import { CustomerSettingsRepository } from '../customer-settings/customer-settings.repository';
 import { CustomerSettingsService } from '../customer-settings/customer-settings.service';
-import { ConversationPlatform } from './schemas/conversation.schema';
+import {
+  ConversationControlMode,
+  ConversationPlatform,
+} from './schemas/conversation.schema';
+import {
+  DEBUG_REPLY_WHILE_OPERATOR_MODE,
+  HANDOFF_DEFAULT_USER_MESSAGE,
+} from './handoff-messages';
 import { ZodValidationPipe } from '../customer/pipes/zod-validation.pipe';
-import { DebugSendSchema, type DebugSendDto } from './dto/debug-send.dto';
+import {
+  DebugResetModeSchema,
+  DebugSendSchema,
+  type DebugSendDto,
+} from './dto/debug-send.dto';
 
 @Controller('conversations')
 export class ConversationsController {
@@ -42,7 +53,14 @@ export class ConversationsController {
   async debugSend(
     @CurrentUser() user: CurrentUserData,
     @Body(new ZodValidationPipe(DebugSendSchema)) dto: DebugSendDto,
-  ): Promise<{ data: { reply: string }; success: boolean }> {
+  ): Promise<{
+    data: {
+      reply: string;
+      handoff: boolean;
+      operatorMode?: boolean;
+    };
+    success: boolean;
+  }> {
     const { botId, message } = dto;
     const chatId = user.customerId.toString();
 
@@ -68,21 +86,84 @@ export class ConversationsController {
       { normalizedPromptVersion },
     );
 
-    const reply = await this.conversationReplyService.replyInContext(
+    const mode = await this.conversationsService.getControlMode(
+      ConversationPlatform.TEST,
+      chatId,
+      botId,
+    );
+    if (mode === ConversationControlMode.OPERATOR) {
+      return {
+        success: true,
+        data: {
+          reply: DEBUG_REPLY_WHILE_OPERATOR_MODE,
+          handoff: true,
+          operatorMode: true,
+        },
+      };
+    }
+
+    const { reply, handoff } = await this.conversationReplyService.replyInContext(
       botId,
       ConversationPlatform.TEST,
       chatId,
       systemPrompt,
     );
 
+    const displayReply =
+      handoff && reply.trim() === ''
+        ? HANDOFF_DEFAULT_USER_MESSAGE
+        : reply;
+
+    if (handoff) {
+      await this.conversationsService.setControlMode(
+        ConversationPlatform.TEST,
+        chatId,
+        botId,
+        ConversationControlMode.OPERATOR,
+      );
+    }
+
     await this.conversationsService.addAssistantMessage(
       ConversationPlatform.TEST,
       chatId,
       botId,
-      reply,
+      displayReply,
     );
 
-    return { success: true, data: { reply } };
+    return {
+      success: true,
+      data: { reply: displayReply, handoff, operatorMode: false },
+    };
+  }
+
+  /**
+   * Вернуть тестовый диалог в режим ответов LLM (после handoff в отладке).
+   */
+  @Post('debug/reset-mode')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  async debugResetMode(
+    @CurrentUser() user: CurrentUserData,
+    @Body(new ZodValidationPipe(DebugResetModeSchema)) dto: { botId: string },
+  ): Promise<{ success: boolean }> {
+    const { botId } = dto;
+    const chatId = user.customerId.toString();
+
+    const settings = await this.customerSettingsRepository.findById(botId);
+    if (!settings) {
+      throw new ForbiddenException('Бот не найден');
+    }
+    if (settings.customerId !== chatId) {
+      throw new ForbiddenException('Нет доступа к этому боту');
+    }
+
+    await this.conversationsService.setControlMode(
+      ConversationPlatform.TEST,
+      chatId,
+      botId,
+      ConversationControlMode.BOT,
+    );
+    return { success: true };
   }
 
   /**

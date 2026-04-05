@@ -9,12 +9,14 @@ import { UserModule } from '../user/user.module';
 import { ConversationsModule } from '../conversations/conversations.module';
 import { LlmModule } from '../llm/llm.module';
 import { TariffUsageModule } from '../tariff-usage/tariff-usage.module';
+import { CustomerModule } from '../customer/customer.module';
 import { TELEGRAM_INCOMING_QUEUE } from './constants';
 
 @Module({
   imports: [
     CustomerSettingsModule,
     TariffUsageModule,
+    CustomerModule,
     UserModule,
     ConversationsModule,
     LlmModule,

@@ -8,6 +8,7 @@ import {
   ConversationType,
   ConversationMessage,
   ConversationMessageType,
+  ConversationControlMode,
 } from './schemas/conversation.schema';
 
 @Injectable()
@@ -68,6 +69,21 @@ export class ConversationsRepository {
       .findByIdAndUpdate(
         id,
         { $push: { messages: msg }, $set: { updatedAt: new Date() } },
+        { new: true },
+      )
+      .exec();
+  }
+
+  async setControlMode(
+    platform: ConversationPlatform,
+    chatId: string,
+    botId: string,
+    controlMode: ConversationControlMode,
+  ): Promise<ConversationDocument | null> {
+    return this.conversationModel
+      .findOneAndUpdate(
+        { platform, chatId, botId },
+        { $set: { controlMode, updatedAt: new Date() } },
         { new: true },
       )
       .exec();

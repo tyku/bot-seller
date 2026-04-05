@@ -6,6 +6,10 @@ import type { Readable } from 'node:stream';
 import { type LlmModelId } from './constants';
 import { SystemPromptService } from './system-prompt.service';
 import { sanitizeText } from '../common/pii-sanitizer';
+import {
+  parseBotAssistantJson,
+  type BotAssistantPayload,
+} from './bot-reply-json';
 
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
@@ -19,7 +23,13 @@ export interface LlmChatOptions {
   model?: LlmModelId;
   /** Не обогащать сообщения глобальными системными промптами (для нормализации промпта) */
   skipEnrich?: boolean;
+  /** Вернуть сырой текст ответа без разбора JSON (классификаторы и т.п.). */
+  rawResponse?: boolean;
+  /** Ограничение длины ответа (токены). */
+  maxTokens?: number;
 }
+
+export type { BotAssistantPayload };
 
 @Injectable()
 export class LlmService {
@@ -34,7 +44,7 @@ export class LlmService {
     this.apiKey = this.configService.get<string>('openRouter.apiKey');
 
     const model = this.configService.get<string>('openRouter.defaultModel');
-    
+
     if (!model) {
       throw new Error('OPENROUTER_DEFAULT_MODEL is not set');
     }
@@ -77,21 +87,47 @@ export class LlmService {
   /**
    * Отправка запроса в OpenRouter (chat completions).
    * Если API key не задан, возвращает заглушку.
+   * Ответ с JSON `{"answer":"..."}` разбирается; иначе возвращается сырой текст.
    */
   async chat(options: LlmChatOptions): Promise<string> {
+    const raw = await this.streamOpenRouterRaw(options);
+    if (options.rawResponse) {
+      return raw;
+    }
+    if (!raw.trim()) {
+      return 'Нет ответа от модели.';
+    }
+    const parsed = parseBotAssistantJson(raw);
+    if (parsed.answer.trim()) {
+      return parsed.answer.trim();
+    }
+    return raw;
+  }
+
+  /**
+   * Один запрос в модель с разбором JSON ответа бота: текст пользователю и флаг передачи оператору.
+   */
+  async chatWithHandoff(options: LlmChatOptions): Promise<BotAssistantPayload> {
+    const raw = await this.streamOpenRouterRaw(options);
+    if (!raw.trim()) {
+      return { answer: 'Нет ответа от модели.', handoff: false };
+    }
+    return parseBotAssistantJson(raw);
+  }
+
+  private async streamOpenRouterRaw(options: LlmChatOptions): Promise<string> {
     const {
       messages,
       model = this.defaultModel as LlmModelId,
       skipEnrich = false,
+      maxTokens,
     } = options;
 
-    // Перед отправкой в LLM очищаем содержимое сообщений от PII.
     const sanitizedMessages = messages.map((m) => ({
       ...m,
       content: sanitizeText(m.content),
     }));
 
-    // Применяем глобальные системные промты (из .env + type=message из БД), если не отключено.
     const enrichedMessages = skipEnrich
       ? sanitizedMessages
       : await this.systemPromptService.enrichMessages(sanitizedMessages);
@@ -110,6 +146,7 @@ export class LlmService {
           content: m.content,
         })),
         stream: true,
+        ...(maxTokens != null && { max_tokens: maxTokens }),
       };
       this.logger.log(
         `OpenRouter request: model=${payload.model}, messages=${JSON.stringify(payload.messages)}`,
@@ -117,8 +154,9 @@ export class LlmService {
 
       requestStartedAt = performance.now();
 
-      this.logger.log(`OpenRouter request started at ${Date.now()}ms (model=${model})`);
-
+      this.logger.log(
+        `OpenRouter request started at ${Date.now()}ms (model=${model})`,
+      );
 
       const response = await axios.post<Readable>(
         OPENROUTER_URL,
@@ -147,18 +185,9 @@ export class LlmService {
 
       const raw = (await this.readOpenRouterStream(response.data)).trim();
       const elapsedMs = Math.round(performance.now() - requestStartedAt);
-      this.logger.log(`OpenRouter request finished in ${elapsedMs}ms (model=${model})`);
-      if (!raw) return 'Нет ответа от модели.';
-
-      // Системный промпт требует формат { answer: string } — достаём answer.
-      try {
-        const parsed = JSON.parse(raw) as { answer?: unknown };
-        if (parsed != null && typeof parsed.answer === 'string' && parsed.answer.trim()) {
-          return parsed.answer.trim();
-        }
-      } catch {
-        // Не JSON или нет поля answer — отдаём как есть
-      }
+      this.logger.log(
+        `OpenRouter request finished in ${elapsedMs}ms (model=${model})`,
+      );
       return raw;
     } catch (error) {
       const suffix =

@@ -7,7 +7,12 @@ import { CustomerSettingsService } from '../../customer-settings/customer-settin
 import { UserService } from '../../user/user.service';
 import { ConversationsService } from '../../conversations/conversations.service';
 import { ConversationReplyService } from '../../conversations/conversation-reply.service';
-import { ConversationPlatform } from '../../conversations/schemas/conversation.schema';
+import { ConversationHandoffService } from '../../conversations/conversation-handoff.service';
+import {
+  ConversationControlMode,
+  ConversationPlatform,
+} from '../../conversations/schemas/conversation.schema';
+import { CustomerService } from '../../customer/customer.service';
 import { SourceType } from '../../user/schemas/user.schema';
 import { LlmRateLimitService } from '../../llm/llm-rate-limit.service';
 import { TariffUsageService } from '../../tariff-usage/tariff-usage.service';
@@ -17,8 +22,40 @@ import type {
   TelegramUpdate,
 } from '../interfaces/telegram-update.interface';
 import type { TelegramBotApiResponse } from '../../common/telegram-bot-api.types';
+import { HANDOFF_DEFAULT_USER_MESSAGE } from '../../conversations/handoff-messages';
 
 const LIMITS_MESSAGE = 'Лимиты закончились.';
+
+const BACK_TO_BOT_USER_MESSAGE =
+  'Диалог с оператором завершён. Снова отвечает бот.';
+
+const OP_END_CALLBACK_PREFIX = 'op:end:';
+
+function buildOperatorEndCallbackData(
+  botId: string,
+  userChatId: string,
+): string {
+  return `${OP_END_CALLBACK_PREFIX}${botId}:${userChatId}`;
+}
+
+function parseOperatorEndCallback(
+  data: string,
+): { botId: string; userChatId: string } | null {
+  if (!data.startsWith(OP_END_CALLBACK_PREFIX)) {
+    return null;
+  }
+  const rest = data.slice(OP_END_CALLBACK_PREFIX.length);
+  const lastColon = rest.lastIndexOf(':');
+  if (lastColon <= 0 || lastColon >= rest.length - 1) {
+    return null;
+  }
+  const botId = rest.slice(0, lastColon);
+  const userChatId = rest.slice(lastColon + 1);
+  if (!botId || !userChatId) {
+    return null;
+  }
+  return { botId, userChatId };
+}
 
 @Processor(TELEGRAM_INCOMING_QUEUE)
 export class TelegramIncomingProcessor extends WorkerHost {
@@ -28,8 +65,10 @@ export class TelegramIncomingProcessor extends WorkerHost {
     private readonly settingsRepository: CustomerSettingsRepository,
     private readonly customerSettingsService: CustomerSettingsService,
     private readonly userService: UserService,
+    private readonly customerService: CustomerService,
     private readonly conversationsService: ConversationsService,
     private readonly conversationReplyService: ConversationReplyService,
+    private readonly conversationHandoff: ConversationHandoffService,
     private readonly llmRateLimit: LlmRateLimitService,
     private readonly tariffUsageService: TariffUsageService,
   ) {
@@ -43,7 +82,23 @@ export class TelegramIncomingProcessor extends WorkerHost {
       `Processing update ${update.update_id} for bot ${botId} (customer ${customerId})`,
     );
 
-    const chatId = update.message?.chat?.id ?? update.callback_query?.message?.chat?.id;
+    const settings = await this.settingsRepository.findById(botId);
+    if (!settings) {
+      this.logger.warn(`Bot ${botId} not found in DB, cannot reply`);
+      return;
+    }
+
+    if (update.callback_query?.data?.startsWith(OP_END_CALLBACK_PREFIX)) {
+      await this.handleOperatorEndCallback(
+        update,
+        settings.token,
+        botId,
+        customerId,
+      );
+      return;
+    }
+
+    const chatId = update.message?.chat?.id;
     if (!chatId) {
       this.logger.debug(
         `No chat_id in update ${update.update_id}, skipping reply`,
@@ -51,36 +106,22 @@ export class TelegramIncomingProcessor extends WorkerHost {
       return;
     }
 
-    const settings = await this.settingsRepository.findById(botId);
-    if (!settings) {
-      this.logger.warn(`Bot ${botId} not found in DB, cannot reply`);
-      return;
-    }
-
     const customerIdNum = Number(customerId);
-    const isStartCommand = /^\/start(\s|@|$)/i.test(
-      (update.message?.text ?? update.callback_query?.data ?? '').trim(),
-    );
+    const userText = (update.message?.text ?? '').trim();
+
+    const isStartCommand = /^\/start(\s|@|$)/i.test(userText);
     if (!Number.isNaN(customerIdNum) && isStartCommand) {
       const chatResult = await this.tariffUsageService.tryConsumeChat(
         customerIdNum,
         String(chatId),
       );
       if (!chatResult.allowed) {
-        await this.sendReply(
-          settings.token,
-          chatId,
-          LIMITS_MESSAGE,
-          botId,
-        );
+        await this.sendReply(settings.token, chatId, LIMITS_MESSAGE, botId);
         return;
       }
     }
 
     await this.ensureUserOnStart(update, chatId, botId);
-
-    const userText =
-      update.message?.text ?? update.callback_query?.data ?? '';
 
     const { systemPrompt, normalizedPromptVersion } =
       await this.customerSettingsService.resolvePromptContext(settings);
@@ -89,12 +130,36 @@ export class TelegramIncomingProcessor extends WorkerHost {
       normalizedPromptVersion,
     });
 
+    const controlMode = await this.conversationsService.getControlMode(
+      ConversationPlatform.TG,
+      String(chatId),
+      botId,
+    );
+    if (controlMode === ConversationControlMode.OPERATOR) {
+      return;
+    }
+
     const messages = await this.conversationsService.getMessages(
       ConversationPlatform.TG,
       String(chatId),
       botId,
     );
-    const hasContext = userText.trim() !== '' || messages.length > 0;
+
+    const cycle = this.conversationHandoff.shouldHandoffForRepeatedUserMessages(
+      messages,
+    );
+
+    if (cycle) {
+      await this.performHandoffToOperator(
+        settings.token,
+        chatId,
+        botId,
+        customerIdNum,
+      );
+      return;
+    }
+
+    const hasContext = userText !== '' || messages.length > 0;
 
     if (hasContext) {
       if (!Number.isNaN(customerIdNum)) {
@@ -116,21 +181,35 @@ export class TelegramIncomingProcessor extends WorkerHost {
         await this.sendReply(
           settings.token,
           chatId,
-          rateLimit.message ?? 'Оператор работает над вашим запросом, ожидайте обработки.',
+          rateLimit.message ??
+            'Оператор работает над вашим запросом, ожидайте обработки.',
           botId,
         );
         return;
       }
     }
 
-    const text = await this.conversationReplyService.replyInContext(
-      botId,
-      ConversationPlatform.TG,
-      String(chatId),
-      systemPrompt,
-    );
-    await this.saveAssistantReply(chatId, botId, text);
-    await this.sendReply(settings.token, chatId, text, botId);
+    const { reply: llmReply, handoff: llmHandoff } =
+      await this.conversationReplyService.replyInContext(
+        botId,
+        ConversationPlatform.TG,
+        String(chatId),
+        systemPrompt,
+      );
+
+    if (llmHandoff) {
+      await this.performHandoffToOperator(
+        settings.token,
+        chatId,
+        botId,
+        customerIdNum,
+        llmReply,
+      );
+      return;
+    }
+
+    await this.saveAssistantReply(chatId, botId, llmReply);
+    await this.sendReply(settings.token, chatId, llmReply, botId);
 
     if (!Number.isNaN(customerIdNum)) {
       await this.tariffUsageService
@@ -138,6 +217,201 @@ export class TelegramIncomingProcessor extends WorkerHost {
         .catch((err) =>
           this.logger.warn(`75% notification check failed: ${err?.message}`),
         );
+    }
+  }
+
+  private async handleOperatorEndCallback(
+    update: TelegramUpdate,
+    token: string,
+    expectedBotId: string,
+    customerId: string,
+  ): Promise<void> {
+    const cq = update.callback_query;
+    if (!cq?.data || !cq.id || !cq.from) {
+      return;
+    }
+
+    const parsed = parseOperatorEndCallback(cq.data);
+    if (!parsed || parsed.botId !== expectedBotId) {
+      await this.answerCallbackQuery(
+        token,
+        cq.id,
+        'Некорректные данные кнопки.',
+      );
+      return;
+    }
+
+    const customerIdNum = Number(customerId);
+    if (Number.isNaN(customerIdNum)) {
+      await this.answerCallbackQuery(token, cq.id, 'Ошибка клиента.');
+      return;
+    }
+
+    const customer = await this.customerService.findByCustomerId(
+      customerIdNum,
+    );
+    if (!customer?.telegramId) {
+      await this.answerCallbackQuery(
+        token,
+        cq.id,
+        'У аккаунта не привязан Telegram.',
+      );
+      return;
+    }
+
+    if (cq.from.id !== customer.telegramId) {
+      await this.answerCallbackQuery(
+        token,
+        cq.id,
+        'Эта кнопка доступна только владельцу бота.',
+      );
+      return;
+    }
+
+    const userChatIdStr = parsed.userChatId;
+    const userChatIdNum = Number(userChatIdStr);
+    if (Number.isNaN(userChatIdNum)) {
+      await this.answerCallbackQuery(token, cq.id, 'Некорректный чат.');
+      return;
+    }
+
+    try {
+      await this.conversationsService.setControlMode(
+        ConversationPlatform.TG,
+        userChatIdStr,
+        expectedBotId,
+        ConversationControlMode.BOT,
+      );
+      await this.conversationsService.addSystemMessage(
+        ConversationPlatform.TG,
+        userChatIdStr,
+        expectedBotId,
+        BACK_TO_BOT_USER_MESSAGE,
+      );
+      await this.sendReply(
+        token,
+        userChatIdNum,
+        BACK_TO_BOT_USER_MESSAGE,
+        expectedBotId,
+      );
+      await this.answerCallbackQuery(token, cq.id, 'Диалог переведён на бота.');
+      await this.removeInlineKeyboard(
+        token,
+        cq.message?.chat.id,
+        cq.message?.message_id,
+      );
+    } catch (err) {
+      this.logger.warn(
+        `handleOperatorEndCallback failed: ${err?.message ?? err}`,
+      );
+      await this.answerCallbackQuery(
+        token,
+        cq.id,
+        'Не удалось завершить диалог. Попробуйте снова.',
+      );
+    }
+  }
+
+  private async performHandoffToOperator(
+    token: string,
+    userChatId: number,
+    botId: string,
+    customerIdNum: number,
+    /** Текст от LLM при handoff из JSON; иначе фиксированная фраза. */
+    userFacingMessage?: string,
+  ): Promise<void> {
+    const userChatIdStr = String(userChatId);
+    const trimmed = userFacingMessage?.trim() ?? '';
+    const line = trimmed !== '' ? trimmed : HANDOFF_DEFAULT_USER_MESSAGE;
+
+    await this.conversationsService.setControlMode(
+      ConversationPlatform.TG,
+      userChatIdStr,
+      botId,
+      ConversationControlMode.OPERATOR,
+    );
+    await this.conversationsService.addAssistantMessage(
+      ConversationPlatform.TG,
+      userChatIdStr,
+      botId,
+      line,
+    );
+    await this.sendReply(token, userChatId, line, botId);
+
+    const cbData = buildOperatorEndCallbackData(botId, userChatIdStr);
+    if (Buffer.byteLength(cbData, 'utf8') > 64) {
+      this.logger.error(
+        `callback_data exceeds 64 bytes for bot ${botId}, chat ${userChatIdStr}`,
+      );
+    }
+
+    if (!Number.isNaN(customerIdNum)) {
+      const customer = await this.customerService.findByCustomerId(
+        customerIdNum,
+      );
+      if (customer?.telegramId) {
+        const notify = `Чат с пользователем перешёл на ручной режим (chat_id: ${userChatIdStr}). Нажмите кнопку, когда можно снова включить ответы бота.`;
+        await this.sendHtmlMessage(token, customer.telegramId, notify, {
+          replyMarkup: {
+            inline_keyboard: [
+              [
+                {
+                  text: 'Завершить диалог',
+                  callback_data: cbData,
+                },
+              ],
+            ],
+          },
+        });
+      } else {
+        this.logger.warn(
+          `Handoff: customer ${customerIdNum} has no telegramId — operator button not sent`,
+        );
+      }
+    }
+  }
+
+  private async answerCallbackQuery(
+    token: string,
+    callbackQueryId: string,
+    text: string,
+  ): Promise<void> {
+    try {
+      await axios.post<TelegramBotApiResponse>(
+        `https://api.telegram.org/bot${token}/answerCallbackQuery`,
+        {
+          callback_query_id: callbackQueryId,
+          text,
+        },
+        { headers: { 'Content-Type': 'application/json' } },
+      );
+    } catch (err) {
+      this.logger.warn(`answerCallbackQuery failed: ${err?.message ?? err}`);
+    }
+  }
+
+  private async removeInlineKeyboard(
+    token: string,
+    chatId: number | undefined,
+    messageId: number | undefined,
+  ): Promise<void> {
+    if (chatId == null || messageId == null) {
+      return;
+    }
+    try {
+      await axios.post(
+        `https://api.telegram.org/bot${token}/editMessageReplyMarkup`,
+        {
+          chat_id: chatId,
+          message_id: messageId,
+          reply_markup: { inline_keyboard: [] },
+        },
+        { headers: { 'Content-Type': 'application/json' } },
+      );
+    } catch (err) {
+      this.logger.debug(
+        `editMessageReplyMarkup failed (ok if message old): ${err?.message ?? err}`,
+      );
     }
   }
 
@@ -244,6 +518,37 @@ export class TelegramIncomingProcessor extends WorkerHost {
     return out;
   }
 
+  private async sendHtmlMessage(
+    token: string,
+    chatId: number,
+    text: string,
+    options?: {
+      replyMarkup?: {
+        inline_keyboard: { text: string; callback_data: string }[][];
+      };
+    },
+  ): Promise<boolean> {
+    const html = this.markdownToTelegramHtml(text);
+    const body: Record<string, unknown> = {
+      chat_id: chatId,
+      text: html,
+      parse_mode: 'HTML',
+    };
+    if (options?.replyMarkup) {
+      body.reply_markup = options.replyMarkup;
+    }
+    const { data: result } = await axios.post<TelegramBotApiResponse>(
+      `https://api.telegram.org/bot${token}/sendMessage`,
+      body,
+      { headers: { 'Content-Type': 'application/json' } },
+    );
+    if (!result.ok) {
+      this.logger.error(`sendMessage (html) failed: ${result.description}`);
+      return false;
+    }
+    return true;
+  }
+
   private async sendReply(
     token: string,
     chatId: number,
@@ -251,24 +556,13 @@ export class TelegramIncomingProcessor extends WorkerHost {
     botId: string,
   ): Promise<void> {
     try {
-      const html = this.markdownToTelegramHtml(text);
-      const { data: result } = await axios.post<TelegramBotApiResponse>(
-        `https://api.telegram.org/bot${token}/sendMessage`,
-        {
-          chat_id: chatId,
-          text: html,
-          parse_mode: 'HTML',
-        },
-        { headers: { 'Content-Type': 'application/json' } },
-      );
-
-      if (!result.ok) {
-        this.logger.error(`sendMessage failed: ${result.description}`);
-      } else {
+      const ok = await this.sendHtmlMessage(token, chatId, text);
+      if (ok) {
         this.logger.log(`Reply sent to chat ${chatId} for bot ${botId}`);
       }
     } catch (error) {
-      this.logger.error(`sendMessage network error: ${error.message}`);
+      const msg = error instanceof Error ? error.message : String(error);
+      this.logger.error(`sendMessage network error: ${msg}`);
       throw error;
     }
   }

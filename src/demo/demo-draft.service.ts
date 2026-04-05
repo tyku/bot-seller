@@ -382,7 +382,7 @@ export class DemoDraftService {
       message,
     );
 
-    const reply = await this.conversationReplyService.replyInContext(
+    const { reply } = await this.conversationReplyService.replyInContext(
       botId,
       ConversationPlatform.TEST,
       chatId,

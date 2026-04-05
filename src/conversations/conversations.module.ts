@@ -7,6 +7,7 @@ import {
 import { ConversationsRepository } from './conversations.repository';
 import { ConversationsService } from './conversations.service';
 import { ConversationReplyService } from './conversation-reply.service';
+import { ConversationHandoffService } from './conversation-handoff.service';
 import { ConversationsController } from './conversations.controller';
 import { CustomerSettingsModule } from '../customer-settings/customer-settings.module';
 import { LlmModule } from '../llm/llm.module';
@@ -20,7 +21,17 @@ import { LlmModule } from '../llm/llm.module';
     LlmModule,
   ],
   controllers: [ConversationsController],
-  providers: [ConversationsRepository, ConversationsService, ConversationReplyService],
-  exports: [ConversationsService, ConversationsRepository, ConversationReplyService],
+  providers: [
+    ConversationsRepository,
+    ConversationsService,
+    ConversationReplyService,
+    ConversationHandoffService,
+  ],
+  exports: [
+    ConversationsService,
+    ConversationsRepository,
+    ConversationReplyService,
+    ConversationHandoffService,
+  ],
 })
 export class ConversationsModule {}

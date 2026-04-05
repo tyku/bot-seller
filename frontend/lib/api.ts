@@ -187,8 +187,23 @@ export const usageApi = {
 
 // Debug chat (test dialogue for a bot)
 export const debugChatApi = {
-  send: async (botId: string, message: string): Promise<{ data: { reply: string }; success: boolean }> => {
+  send: async (
+    botId: string,
+    message: string,
+  ): Promise<{
+    data: {
+      reply: string;
+      handoff: boolean;
+      operatorMode?: boolean;
+    };
+    success: boolean;
+  }> => {
     const response = await api.post('/conversations/debug/send', { botId, message });
+    return response.data;
+  },
+
+  resetMode: async (botId: string): Promise<{ success: boolean }> => {
+    const response = await api.post('/conversations/debug/reset-mode', { botId });
     return response.data;
   },
 

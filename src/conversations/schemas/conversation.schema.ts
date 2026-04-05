@@ -21,6 +21,12 @@ export enum ConversationMessageType {
   SYSTEM = 'system',
 }
 
+/** Кто ведёт диалог: LLM или оператор (ручной режим в том же чате). */
+export enum ConversationControlMode {
+  BOT = 'bot',
+  OPERATOR = 'operator',
+}
+
 @Schema({ _id: false })
 export class ConversationMessage {
   @Prop({ required: true, enum: ConversationMessageType })
@@ -53,6 +59,12 @@ export class Conversation {
 
   @Prop({ enum: ConversationType, default: ConversationType.DEFAULT })
   type: ConversationType;
+
+  @Prop({
+    enum: ConversationControlMode,
+    default: ConversationControlMode.BOT,
+  })
+  controlMode: ConversationControlMode;
 
   /**
    * Версия нормализованного промпта на момент начала диалога (снимок для сопоставления с questions[].id).

@@ -27,6 +27,7 @@ export function DebugSection() {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
+  const [resetting, setResetting] = useState(false);
   const [error, setError] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -95,6 +96,23 @@ export function DebugSection() {
     setBotInUrl(id);
   };
 
+  const handleResetOperatorMode = async () => {
+    if (!selectedBotId || resetting) return;
+    setResetting(true);
+    setError('');
+    try {
+      await debugChatApi.resetMode(selectedBotId);
+      if (selectedBotId) {
+        const res = await debugChatApi.getHistory(selectedBotId);
+        setMessages(res.data?.messages ?? []);
+      }
+    } catch (err) {
+      setError(getErrorMessage(err, 'Не удалось сбросить режим'));
+    } finally {
+      setResetting(false);
+    }
+  };
+
   const handleSend = async () => {
     const text = input.trim();
     if (!text || !selectedBotId || sending) return;
@@ -108,9 +126,14 @@ export function DebugSection() {
     scrollToBottom();
     try {
       const res = await debugChatApi.send(selectedBotId, text);
+      const line = res.data.reply?.trim() ? res.data.reply : '—';
       setMessages((prev) => [
         ...prev,
-        { type: 'assistant', content: res.data.reply, createdAt: new Date().toISOString() },
+        {
+          type: 'assistant',
+          content: line,
+          createdAt: new Date().toISOString(),
+        },
       ]);
     } catch (err) {
       setError(getErrorMessage(err, 'Ошибка ответа бота'));
@@ -162,20 +185,33 @@ export function DebugSection() {
       </div>
 
       <Card className="flex flex-col h-[calc(100vh-16rem)] min-h-[420px] p-0 overflow-hidden">
-        <div className="p-4 border-b border-gray-200 bg-gray-50/80">
-          <label className="block text-sm font-medium text-gray-700 mb-2">Бот</label>
-          <select
-            value={selectedBotId ?? ''}
-            onChange={handleSelectBot}
-            className="w-full max-w-md px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-          >
-            <option value="">Выберите бота</option>
-            {bots.map((b) => (
-              <option key={b.id} value={b.id ?? ''}>
-                {b.name} {b.botType === 'tg' ? '(TG)' : '(VK)'}
-              </option>
-            ))}
-          </select>
+        <div className="p-4 border-b border-gray-200 bg-gray-50/80 flex flex-wrap items-end gap-3">
+          <div className="flex-1 min-w-[200px]">
+            <label className="block text-sm font-medium text-gray-700 mb-2">Бот</label>
+            <select
+              value={selectedBotId ?? ''}
+              onChange={handleSelectBot}
+              className="w-full max-w-md px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+            >
+              <option value="">Выберите бота</option>
+              {bots.map((b) => (
+                <option key={b.id} value={b.id ?? ''}>
+                  {b.name} {b.botType === 'tg' ? '(TG)' : '(VK)'}
+                </option>
+              ))}
+            </select>
+          </div>
+          {selectedBotId && (
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={handleResetOperatorMode}
+              disabled={resetting}
+              isLoading={resetting}
+            >
+              Сбросить режим теста
+            </Button>
+          )}
         </div>
 
         {!selectedBotId ? (
