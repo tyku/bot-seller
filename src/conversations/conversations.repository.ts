@@ -36,18 +36,32 @@ export class ConversationsRepository {
     chatId: string,
     botId: string,
     type: ConversationType = ConversationType.DEFAULT,
+    normalizedPromptVersion?: number,
   ): Promise<ConversationDocument> {
-    const doc = new this.conversationModel({ platform, chatId, botId, type });
+    const doc = new this.conversationModel({
+      platform,
+      chatId,
+      botId,
+      type,
+      ...(normalizedPromptVersion != null && { normalizedPromptVersion }),
+    });
     return doc.save();
   }
 
   async appendMessage(
     id: string,
-    message: { type: ConversationMessageType; content: string },
+    message: {
+      type: ConversationMessageType;
+      content: string;
+      questionId?: string;
+    },
   ): Promise<ConversationDocument | null> {
     const msg: ConversationMessage = {
       type: message.type,
       content: message.content,
+      ...(message.questionId != null && message.questionId !== '' && {
+        questionId: message.questionId,
+      }),
       createdAt: new Date(),
     };
     return this.conversationModel

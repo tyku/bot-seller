@@ -18,8 +18,10 @@ import {
 import { WebhookSecretService } from './services/webhook-secret.service';
 import { BotCacheService } from './services/bot-cache.service';
 import { TelegramWebhookService } from './services/telegram-webhook.service';
+import { Types } from 'mongoose';
 import { TariffUsageService } from '../tariff-usage/tariff-usage.service';
 import { LlmService } from '../llm/llm.service';
+import { NormalizedPromptRepository } from '../normalized-prompt/normalized-prompt.repository';
 
 @Injectable()
 export class CustomerSettingsService {
@@ -32,6 +34,7 @@ export class CustomerSettingsService {
     private readonly telegramWebhookService: TelegramWebhookService,
     private readonly tariffUsageService: TariffUsageService,
     private readonly llmService: LlmService,
+    private readonly normalizedPromptRepository: NormalizedPromptRepository,
   ) {}
 
   async create(
@@ -60,22 +63,37 @@ export class CustomerSettingsService {
         webhookSecret = this.webhookSecretService.encrypt(plainSecret);
       }
 
-      const normalizedPrompt = await this.computeNormalizedPrompt(
+      const normalizedBody = await this.computeNormalizedPrompt(
         createCustomerSettingsDto.prompts ?? [],
       );
 
-      const customerSettings = await this.customerSettingsRepository.create({
+      let customerSettings = await this.customerSettingsRepository.create({
         ...createCustomerSettingsDto,
         webhookSecret,
-        ...(normalizedPrompt != null && { normalizedPrompt }),
       });
+
+      if (normalizedBody != null) {
+        const np = await this.normalizedPromptRepository.create({
+          customerId: createCustomerSettingsDto.customerId,
+          customerSettingsId: customerSettings._id.toString(),
+          version: 1,
+          body: normalizedBody,
+        });
+        const withPrompt = await this.customerSettingsRepository.update(
+          customerSettings._id.toString(),
+          { currentNormalizedPromptId: np._id },
+        );
+        if (withPrompt) {
+          customerSettings = withPrompt;
+        }
+      }
 
       if (!Number.isNaN(customerIdNum)) {
         await this.tariffUsageService.recordBotCreated(customerIdNum);
       }
 
       this.logger.log(`Customer settings created successfully: ${customerSettings._id}`);
-      return this.mapToResponseDto(customerSettings);
+      return await this.mapToResponseDto(customerSettings);
     } catch (error) {
       this.logger.error(
         `Failed to create customer settings for customer ${createCustomerSettingsDto.customerId}: ${error.message}`,
@@ -90,7 +108,9 @@ export class CustomerSettingsService {
     try {
       const customerSettings = await this.customerSettingsRepository.findAll();
       this.logger.log(`Found ${customerSettings.length} customer settings`);
-      return customerSettings.map((settings) => this.mapToResponseDto(settings));
+      return Promise.all(
+        customerSettings.map((settings) => this.mapToResponseDto(settings)),
+      );
     } catch (error) {
       this.logger.error(`Failed to fetch all customer settings: ${error.message}`, error.stack);
       throw error;
@@ -106,7 +126,7 @@ export class CustomerSettingsService {
         throw new NotFoundException('Customer settings not found');
       }
       this.logger.log(`Customer settings found: ${id}`);
-      return this.mapToResponseDto(customerSettings);
+      return await this.mapToResponseDto(customerSettings);
     } catch (error) {
       if (error instanceof NotFoundException) {
         throw error;
@@ -124,7 +144,9 @@ export class CustomerSettingsService {
       const customerSettings =
         await this.customerSettingsRepository.findByCustomerId(customerId);
       this.logger.log(`Found ${customerSettings.length} settings for customer ${customerId}`);
-      return customerSettings.map((settings) => this.mapToResponseDto(settings));
+      return Promise.all(
+        customerSettings.map((settings) => this.mapToResponseDto(settings)),
+      );
     } catch (error) {
       this.logger.error(`Failed to fetch settings for customer ${customerId}: ${error.message}`, error.stack);
       throw error;
@@ -183,15 +205,25 @@ export class CustomerSettingsService {
       await this.activateTelegramBot(id, current);
     }
 
-    // Нормализуем промпт только при сохранении/изменении prompts
-    let dataToUpdate: UpdateCustomerSettingsDto & { normalizedPrompt?: string } =
-      { ...updateData };
+    let dataToUpdate: UpdateCustomerSettingsDto & {
+      currentNormalizedPromptId?: Types.ObjectId;
+    } = { ...updateData };
     if (updateData.prompts !== undefined) {
-      const normalizedPrompt = await this.computeNormalizedPrompt(
+      const normalizedBody = await this.computeNormalizedPrompt(
         updateData.prompts,
       );
-      if (normalizedPrompt != null) {
-        dataToUpdate = { ...dataToUpdate, normalizedPrompt };
+      if (normalizedBody != null) {
+        const maxV = await this.normalizedPromptRepository.getMaxVersion(id);
+        const np = await this.normalizedPromptRepository.create({
+          customerId: current.customerId,
+          customerSettingsId: id,
+          version: maxV + 1,
+          body: normalizedBody,
+        });
+        dataToUpdate = {
+          ...dataToUpdate,
+          currentNormalizedPromptId: np._id,
+        };
       }
     }
 
@@ -223,7 +255,7 @@ export class CustomerSettingsService {
       }
 
       this.logger.log(`Customer settings updated successfully: ${id}`);
-      return this.mapToResponseDto(updated);
+      return await this.mapToResponseDto(updated);
     } catch (error) {
       if (isActivating && current.botType === BotType.TG) {
         await this.deactivateTelegramBot(id, current).catch((e) =>
@@ -258,6 +290,7 @@ export class CustomerSettingsService {
         }
       }
 
+      await this.normalizedPromptRepository.deleteByCustomerSettingsId(id);
       await this.customerSettingsRepository.delete(id);
       this.logger.log(`Customer settings deleted successfully: ${id}`);
     } catch (error) {
@@ -318,8 +351,35 @@ export class CustomerSettingsService {
   // ─────────────── Normalized prompt ───────────────
 
   /**
+   * Текст для системного промпта LLM и версия нормализованного промпта (привязка диалога к снимку промпта).
+   */
+  async resolvePromptContext(settings: CustomerSettingsDocument): Promise<{
+    systemPrompt: string;
+    normalizedPromptVersion?: number;
+  }> {
+    let normalizedBody: string | undefined;
+    let normalizedPromptVersion: number | undefined;
+    if (settings.currentNormalizedPromptId) {
+      const np = await this.normalizedPromptRepository.findById(
+        settings.currentNormalizedPromptId.toString(),
+      );
+      if (np) {
+        normalizedBody = np.body;
+        normalizedPromptVersion = np.version;
+      }
+    }
+    const fallback =
+      settings.prompts
+        ?.map((p) => p.body?.trim())
+        .filter((b): b is string => Boolean(b))
+        .join('\n\n') ?? '';
+    const systemPrompt = (normalizedBody?.trim() || fallback).trim();
+    return { systemPrompt, normalizedPromptVersion };
+  }
+
+  /**
    * Берёт пользовательский промпт (context), системный с типом prompt, собирает запрос в LLM,
-   * возвращает ответ для сохранения в normalizedPrompt. Если пользовательского промпта нет — null.
+   * возвращает тело для новой версии в коллекции normalized-prompts. Если пользовательского промпта нет — null.
    */
   private async computeNormalizedPrompt(
     prompts: Array<{ body?: string }>,
@@ -343,9 +403,20 @@ export class CustomerSettingsService {
 
   // ─────────────── Mapping ───────────────
 
-  private mapToResponseDto(
+  private async mapToResponseDto(
     customerSettings: CustomerSettingsDocument,
-  ): ResponseCustomerSettingsDto {
+  ): Promise<ResponseCustomerSettingsDto> {
+    let normalizedPrompt: string | undefined;
+    let normalizedPromptVersion: number | undefined;
+    if (customerSettings.currentNormalizedPromptId) {
+      const np = await this.normalizedPromptRepository.findById(
+        customerSettings.currentNormalizedPromptId.toString(),
+      );
+      if (np) {
+        normalizedPrompt = np.body;
+        normalizedPromptVersion = np.version;
+      }
+    }
     return new ResponseCustomerSettingsDto({
       id: customerSettings._id.toString(),
       customerId: customerSettings.customerId,
@@ -358,7 +429,8 @@ export class CustomerSettingsService {
         body: prompt.body,
         type: prompt.type,
       })),
-      normalizedPrompt: customerSettings.normalizedPrompt,
+      normalizedPrompt,
+      normalizedPromptVersion,
       createdAt: customerSettings.createdAt,
       updatedAt: customerSettings.updatedAt,
     });

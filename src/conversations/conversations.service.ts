@@ -18,6 +18,7 @@ export class ConversationsService {
     chatId: string,
     botId: string,
     type?: ConversationType,
+    options?: { normalizedPromptVersion?: number },
   ) {
     const resolvedType =
       type ?? (platform === ConversationPlatform.TEST ? ConversationType.TEST : ConversationType.DEFAULT);
@@ -32,6 +33,7 @@ export class ConversationsService {
         chatId,
         botId,
         resolvedType,
+        options?.normalizedPromptVersion,
       );
     }
     return conversation;
@@ -42,13 +44,20 @@ export class ConversationsService {
     chatId: string,
     botId: string,
     content: string,
+    options?: {
+      questionId?: string;
+      normalizedPromptVersion?: number;
+    },
   ) {
-    const conversation = await this.getOrCreate(platform, chatId, botId);
+    const conversation = await this.getOrCreate(platform, chatId, botId, undefined, {
+      normalizedPromptVersion: options?.normalizedPromptVersion,
+    });
     return this.conversationsRepository.appendMessage(
       String(conversation._id),
       {
         type: ConversationMessageType.USER,
         content,
+        questionId: options?.questionId,
       },
     );
   }
@@ -91,12 +100,31 @@ export class ConversationsService {
     chatId: string,
     botId: string,
   ): Promise<ConversationMessage[]> {
+    const thread = await this.getThread(platform, chatId, botId);
+    return thread?.messages ?? [];
+  }
+
+  /** История + версия промпта, зафиксированная при создании диалога. */
+  async getThread(
+    platform: ConversationPlatform,
+    chatId: string,
+    botId: string,
+  ): Promise<{
+    messages: ConversationMessage[];
+    normalizedPromptVersion?: number;
+  } | null> {
     const conversation =
       await this.conversationsRepository.findByPlatformChatAndBot(
         platform,
         chatId,
         botId,
       );
-    return conversation?.messages ?? [];
+    if (!conversation) {
+      return null;
+    }
+    return {
+      messages: conversation.messages ?? [],
+      normalizedPromptVersion: conversation.normalizedPromptVersion,
+    };
   }
 }

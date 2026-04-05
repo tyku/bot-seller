@@ -1,5 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { Document, Schema as MongooseSchema } from 'mongoose';
+import { Document, Schema as MongooseSchema, Types } from 'mongoose';
 
 export type CustomerSettingsDocument = CustomerSettings & Document;
 
@@ -55,9 +55,9 @@ export class CustomerSettings {
   @Prop({ type: [PromptSchema], default: [] })
   prompts: Prompt[];
 
-  /** Нормализованный промпт (результат LLM по пользовательскому промпту и системному type=prompt) */
-  @Prop()
-  normalizedPrompt?: string;
+  /** Текущая версия нормализованного промпта (коллекция normalized-prompts). */
+  @Prop({ type: MongooseSchema.Types.ObjectId, ref: 'NormalizedPrompt' })
+  currentNormalizedPromptId?: Types.ObjectId;
 
   @Prop()
   createdAt: Date;

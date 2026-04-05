@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import {
   CustomerSettings,
   CustomerSettingsDocument,
@@ -21,7 +21,6 @@ export class CustomerSettingsRepository {
   async create(
     data: CreateCustomerSettingsDto & {
       webhookSecret?: string;
-      normalizedPrompt?: string;
     },
   ): Promise<CustomerSettingsDocument> {
     const customerSettings = new this.customerSettingsModel(data);
@@ -61,7 +60,9 @@ export class CustomerSettingsRepository {
 
   async update(
     id: string,
-    updateData: Partial<CreateCustomerSettingsDto> & { normalizedPrompt?: string },
+    updateData: Partial<CreateCustomerSettingsDto> & {
+      currentNormalizedPromptId?: Types.ObjectId;
+    },
   ): Promise<CustomerSettingsDocument | null> {
     return this.customerSettingsModel
       .findByIdAndUpdate(id, updateData, { new: true })

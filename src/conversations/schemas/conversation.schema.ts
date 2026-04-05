@@ -29,6 +29,10 @@ export class ConversationMessage {
   @Prop({ required: true })
   content: string;
 
+  /** Id вопроса из normalized JSON (для анти-зацикливания и аналитики). */
+  @Prop()
+  questionId?: string;
+
   @Prop({ default: () => new Date() })
   createdAt: Date;
 }
@@ -49,6 +53,12 @@ export class Conversation {
 
   @Prop({ enum: ConversationType, default: ConversationType.DEFAULT })
   type: ConversationType;
+
+  /**
+   * Версия нормализованного промпта на момент начала диалога (снимок для сопоставления с questions[].id).
+   */
+  @Prop()
+  normalizedPromptVersion?: number;
 
   @Prop({ type: [ConversationMessageSchema], default: [] })
   messages: ConversationMessage[];

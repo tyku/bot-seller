@@ -12,12 +12,14 @@ import {
 } from './schemas/customer-settings.schema';
 import { TariffUsageModule } from '../tariff-usage/tariff-usage.module';
 import { LlmModule } from '../llm/llm.module';
+import { NormalizedPromptModule } from '../normalized-prompt/normalized-prompt.module';
 
 @Module({
   imports: [
     MongooseModule.forFeature([
       { name: CustomerSettings.name, schema: CustomerSettingsSchema },
     ]),
+    NormalizedPromptModule,
     TariffUsageModule,
     forwardRef(() => LlmModule),
   ],

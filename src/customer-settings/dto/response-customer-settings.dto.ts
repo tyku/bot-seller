@@ -15,6 +15,8 @@ export class ResponseCustomerSettingsDto {
   status: BotStatus;
   prompts: PromptDto[];
   normalizedPrompt?: string;
+  /** Версия текущего нормализованного промпта (для сопоставления с диалогами). */
+  normalizedPromptVersion?: number;
   createdAt: Date;
   updatedAt: Date;
 

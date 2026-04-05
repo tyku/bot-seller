@@ -16,6 +16,7 @@ import type { CurrentUserData } from '../auth/decorators/current-user.decorator'
 import { ConversationsService } from './conversations.service';
 import { ConversationReplyService } from './conversation-reply.service';
 import { CustomerSettingsRepository } from '../customer-settings/customer-settings.repository';
+import { CustomerSettingsService } from '../customer-settings/customer-settings.service';
 import { ConversationPlatform } from './schemas/conversation.schema';
 import { ZodValidationPipe } from '../customer/pipes/zod-validation.pipe';
 import { DebugSendSchema, type DebugSendDto } from './dto/debug-send.dto';
@@ -28,6 +29,7 @@ export class ConversationsController {
     private readonly conversationsService: ConversationsService,
     private readonly conversationReplyService: ConversationReplyService,
     private readonly customerSettingsRepository: CustomerSettingsRepository,
+    private readonly customerSettingsService: CustomerSettingsService,
   ) {}
 
   /**
@@ -55,19 +57,16 @@ export class ConversationsController {
       throw new ForbiddenException('Нет доступа к этому боту');
     }
 
+    const { systemPrompt, normalizedPromptVersion } =
+      await this.customerSettingsService.resolvePromptContext(settings);
+
     await this.conversationsService.addUserMessage(
       ConversationPlatform.TEST,
       chatId,
       botId,
       message,
+      { normalizedPromptVersion },
     );
-
-    const systemPrompt =
-      settings.normalizedPrompt ??
-      settings.prompts
-        ?.map((p) => p.body?.trim())
-        .filter((b): b is string => Boolean(b))
-        .join('\n\n');
 
     const reply = await this.conversationReplyService.replyInContext(
       botId,
@@ -96,7 +95,15 @@ export class ConversationsController {
     @CurrentUser() user: CurrentUserData,
     @Query('botId') botId: string,
   ): Promise<{
-    data: { messages: Array<{ type: string; content: string; createdAt: string }> };
+    data: {
+      messages: Array<{
+        type: string;
+        content: string;
+        questionId?: string;
+        createdAt: string;
+      }>;
+      normalizedPromptVersion?: number;
+    };
     success: boolean;
   }> {
     if (!botId?.trim()) {
@@ -112,18 +119,28 @@ export class ConversationsController {
       throw new ForbiddenException('Нет доступа к этому боту');
     }
 
-    const messages = await this.conversationsService.getMessages(
+    const thread = await this.conversationsService.getThread(
       ConversationPlatform.TEST,
       chatId,
       botId,
     );
 
+    const messages = thread?.messages ?? [];
     const list = messages.map((m) => ({
       type: m.type,
       content: m.content,
+      ...(m.questionId != null && m.questionId !== '' && { questionId: m.questionId }),
       createdAt: (m.createdAt as Date).toISOString(),
     }));
 
-    return { success: true, data: { messages: list } };
+    return {
+      success: true,
+      data: {
+        messages: list,
+        ...(thread?.normalizedPromptVersion != null && {
+          normalizedPromptVersion: thread.normalizedPromptVersion,
+        }),
+      },
+    };
   }
 }

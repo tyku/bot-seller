@@ -3,6 +3,7 @@ import { Logger } from '@nestjs/common';
 import { Job } from 'bullmq';
 import axios from 'axios';
 import { CustomerSettingsRepository } from '../../customer-settings/customer-settings.repository';
+import { CustomerSettingsService } from '../../customer-settings/customer-settings.service';
 import { UserService } from '../../user/user.service';
 import { ConversationsService } from '../../conversations/conversations.service';
 import { ConversationReplyService } from '../../conversations/conversation-reply.service';
@@ -25,6 +26,7 @@ export class TelegramIncomingProcessor extends WorkerHost {
 
   constructor(
     private readonly settingsRepository: CustomerSettingsRepository,
+    private readonly customerSettingsService: CustomerSettingsService,
     private readonly userService: UserService,
     private readonly conversationsService: ConversationsService,
     private readonly conversationReplyService: ConversationReplyService,
@@ -79,7 +81,13 @@ export class TelegramIncomingProcessor extends WorkerHost {
 
     const userText =
       update.message?.text ?? update.callback_query?.data ?? '';
-    await this.addUserMessageToConversation(chatId, botId, userText);
+
+    const { systemPrompt, normalizedPromptVersion } =
+      await this.customerSettingsService.resolvePromptContext(settings);
+
+    await this.addUserMessageToConversation(chatId, botId, userText, {
+      normalizedPromptVersion,
+    });
 
     const messages = await this.conversationsService.getMessages(
       ConversationPlatform.TG,
@@ -115,12 +123,6 @@ export class TelegramIncomingProcessor extends WorkerHost {
       }
     }
 
-    const systemPrompt =
-      settings.normalizedPrompt ??
-      settings.prompts
-        ?.map((p) => p.body?.trim())
-        .filter((b): b is string => Boolean(b))
-        .join('\n\n');
     const text = await this.conversationReplyService.replyInContext(
       botId,
       ConversationPlatform.TG,
@@ -177,6 +179,10 @@ export class TelegramIncomingProcessor extends WorkerHost {
     chatId: number,
     botId: string,
     userText: string,
+    options?: {
+      normalizedPromptVersion?: number;
+      questionId?: string;
+    },
   ): Promise<void> {
     if (!userText) {
       return;
@@ -188,6 +194,7 @@ export class TelegramIncomingProcessor extends WorkerHost {
         String(chatId),
         botId,
         userText,
+        options,
       );
     } catch (err) {
       this.logger.warn(
