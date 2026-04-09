@@ -60,6 +60,11 @@ export class SystemPromptService implements OnModuleInit {
     return this.loadFromDbAndSetCache(type);
   }
 
+  /** Перезагрузить кэш Redis для типа после изменения документов в БД. */
+  async refreshCacheForType(type: SystemPromptType): Promise<void> {
+    await this.loadFromDbAndSetCache(type);
+  }
+
   private async loadFromDbAndSetCache(
     type: SystemPromptType,
   ): Promise<string[]> {
@@ -121,6 +126,45 @@ export class SystemPromptService implements OnModuleInit {
    *
    * Используется LlmService перед каждым запросом к провайдеру.
    */
+  async listPromptsForAdmin(): Promise<
+    Array<{
+      id: string;
+      name: string;
+      type: SystemPromptType;
+      text: string;
+    }>
+  > {
+    const docs = await this.systemPromptRepository.findAll();
+    return docs.map((d) => ({
+      id: d._id.toString(),
+      name: d.name,
+      type: d.type,
+      text: d.text,
+    }));
+  }
+
+  async updatePromptText(
+    id: string,
+    text: string,
+  ): Promise<{
+    id: string;
+    name: string;
+    type: SystemPromptType;
+    text: string;
+  } | null> {
+    const updated = await this.systemPromptRepository.updateText(id, text);
+    if (!updated) {
+      return null;
+    }
+    await this.refreshCacheForType(updated.type);
+    return {
+      id: updated._id.toString(),
+      name: updated.name,
+      type: updated.type,
+      text: updated.text,
+    };
+  }
+
   async enrichMessages(
     messages: OpenRouterMessage[],
     options?: { rawInstruction?: string },
