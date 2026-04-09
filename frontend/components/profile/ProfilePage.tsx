@@ -1,9 +1,11 @@
 'use client';
 
 import React, { useCallback } from 'react';
+import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ProfileTab } from '@/lib/types';
 import { useAuth } from '@/contexts/AuthContext';
+import { isAdmin } from '@/lib/auth';
 import { BotsSection } from './BotsSection';
 import { OrganizationSection } from './OrganizationSection';
 import { SubscriptionSection } from './SubscriptionSection';
@@ -73,6 +75,14 @@ export function ProfilePage() {
               <h1 className="text-xl font-bold text-gray-900">Bot Seller</h1>
             </div>
             <div className="flex items-center gap-4">
+              {user && isAdmin(user) && (
+                <Link
+                  href="/admin"
+                  className="text-sm font-medium text-blue-600 hover:text-blue-800"
+                >
+                  Админ
+                </Link>
+              )}
               <span className="text-sm text-gray-600">
                 {user?.email || user?.phone || 'Пользователь'}
               </span>

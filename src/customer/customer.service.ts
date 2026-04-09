@@ -4,16 +4,21 @@ import {
   BadRequestException,
   Logger,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { CustomerRepository } from './customer.repository';
 import { CreateCustomerDto } from './dto/create-customer.dto';
 import { ResponseCustomerDto } from './dto/response-customer.dto';
 import { CustomerDocument, CustomerStatus } from './schemas/customer.schema';
+import { isDevelopmentNodeEnv, resolveRole } from '../auth/roles';
 
 @Injectable()
 export class CustomerService {
   private readonly logger = new Logger(CustomerService.name);
 
-  constructor(private readonly customerRepository: CustomerRepository) {}
+  constructor(
+    private readonly customerRepository: CustomerRepository,
+    private readonly configService: ConfigService,
+  ) {}
 
   async create(createCustomerDto: CreateCustomerDto): Promise<ResponseCustomerDto> {
     this.logger.log(`Creating customer: ${createCustomerDto.email || createCustomerDto.phone}`);
@@ -147,7 +152,7 @@ export class CustomerService {
     return this.customerRepository.findByCustomerId(customerId);
   }
 
-  private mapToResponseDto(customer: CustomerDocument): ResponseCustomerDto {
+  mapToResponseDto(customer: CustomerDocument): ResponseCustomerDto {
     return new ResponseCustomerDto({
       id: customer._id.toString(),
       customerId: customer.customerId,
@@ -155,6 +160,10 @@ export class CustomerService {
       email: customer.email,
       phone: customer.phone,
       status: customer.status,
+      role: resolveRole(
+        { email: customer.email, role: customer.role },
+        isDevelopmentNodeEnv(this.configService.get<string>('nodeEnv')),
+      ),
       createdAt: customer.createdAt,
       updatedAt: customer.updatedAt,
     });

@@ -3,11 +3,12 @@ import { ConfigService } from '@nestjs/config';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { CustomerService } from '../../customer/customer.service';
+import { CustomerStatus } from '../../customer/schemas/customer.schema';
 
 export interface JwtPayload {
   sub: string; // customer _id
   customerId: number; // business customerId
-  email: string;
+  email?: string;
 }
 
 @Injectable()
@@ -24,21 +25,22 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   async validate(payload: JwtPayload) {
-    const customer = await this.customerService.findById(payload.sub);
-    
-    if (!customer) {
+    let customer;
+    try {
+      customer = await this.customerService.findById(payload.sub);
+    } catch {
       throw new UnauthorizedException('Customer not found');
     }
 
-    // Check if customer is verified
-    if (customer.status !== 'verified') {
+    if (customer.status !== CustomerStatus.VERIFIED) {
       throw new UnauthorizedException('Customer not verified');
     }
 
     return {
-      _id: payload.sub,
-      customerId: payload.customerId,
-      email: payload.email,
+      _id: customer.id,
+      customerId: customer.customerId,
+      email: customer.email,
+      role: customer.role,
     };
   }
 }

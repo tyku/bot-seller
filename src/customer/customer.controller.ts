@@ -88,22 +88,14 @@ export class CustomerController {
     message: string;
   }> {
     this.logger.log('PATCH /customers/me - Update current user request received');
-    const customer = await this.customerService.updateCustomer(user._id, {
+    await this.customerService.updateCustomer(user._id, {
       name: updateData.name,
     });
     this.logger.log('PATCH /customers/me - Current user updated successfully');
+    const data = await this.customerService.findById(user._id);
     return {
       success: true,
-      data: new ResponseCustomerDto({
-        id: customer._id.toString(),
-        customerId: customer.customerId,
-        name: customer.name,
-        email: customer.email,
-        phone: customer.phone,
-        status: customer.status,
-        createdAt: customer.createdAt,
-        updatedAt: customer.updatedAt,
-      }),
+      data,
       message: 'Customer updated successfully',
     };
   }

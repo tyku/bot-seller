@@ -7,6 +7,8 @@ export type ProfileTab =
   | 'debug'
   | 'inbox';
 
+export type UserRole = 'user' | 'admin';
+
 export interface User {
   id: string;
   customerId: number;
@@ -14,6 +16,18 @@ export interface User {
   email: string;
   phone: string;
   status: 'created' | 'verified';
+  /** Effective role from API; omit in old cached sessions. */
+  role?: UserRole;
+}
+
+/** Системные промпты (MongoDB systemprompts), админ-редактирование */
+export type SystemPromptType = 'message' | 'prompt';
+
+export interface SystemPromptAdminRow {
+  id: string;
+  name: string;
+  type: SystemPromptType;
+  text: string;
 }
 
 export type BotStatusType = 'created' | 'active' | 'archived';

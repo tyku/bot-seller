@@ -8,6 +8,11 @@ export enum CustomerStatus {
   VERIFIED = 'verified',
 }
 
+export enum CustomerRole {
+  USER = 'user',
+  ADMIN = 'admin',
+}
+
 @Schema({ timestamps: true })
 export class Customer {
   @Prop()
@@ -24,6 +29,9 @@ export class Customer {
 
   @Prop({ required: true, enum: CustomerStatus, default: CustomerStatus.CREATED })
   status: CustomerStatus;
+
+  @Prop({ enum: CustomerRole, default: CustomerRole.USER })
+  role: CustomerRole;
 
   // Telegram связь (опциональная)
   @Prop({ unique: true, sparse: true, index: true })
