@@ -7,6 +7,7 @@ import { ConversationsRepository } from './conversations.repository';
 import { CustomerSettingsRepository } from '../customer-settings/customer-settings.repository';
 import { BotType } from '../customer-settings/schemas/customer-settings.schema';
 import { sendTelegramHtmlMessage } from '../common/telegram-html-message';
+import { sendVkMessage } from '../common/vk-api';
 import {
   ConversationPlatform,
   ConversationType,
@@ -355,8 +356,7 @@ export class ConversationsService {
   }
 
   /**
-   * Сохраняет сообщение оператора и доставляет его в канал (Telegram).
-   * VK — пока только запись в истории без отправки в мессенджер.
+   * Сохраняет сообщение оператора и доставляет его в канал (Telegram/VK).
    */
   async sendOperatorMessageFromInbox(
     conversationId: string,
@@ -404,7 +404,14 @@ export class ConversationsService {
         );
       }
     } else if (doc.platform === ConversationPlatform.VK) {
-      // История в БД; доставка в VK API — отдельная задача.
+      if (settings.botType !== BotType.VK) {
+        throw new BadRequestException('Тип бота не совпадает с каналом VK');
+      }
+      const userIdNum = Number(doc.chatId);
+      if (Number.isNaN(userIdNum)) {
+        throw new BadRequestException('Некорректный chat_id для VK');
+      }
+      await sendVkMessage(settings.token, userIdNum, trimmed);
     } else {
       throw new BadRequestException('Канал не поддерживает отправку из inbox');
     }
