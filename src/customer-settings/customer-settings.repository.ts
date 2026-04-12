@@ -21,6 +21,8 @@ export class CustomerSettingsRepository {
   async create(
     data: CreateCustomerSettingsDto & {
       webhookSecret?: string;
+      vkConfirmationCode?: string;
+      vkCallbackSecret?: string;
     },
   ): Promise<CustomerSettingsDocument> {
     const customerSettings = new this.customerSettingsModel(data);

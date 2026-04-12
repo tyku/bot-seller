@@ -14,6 +14,10 @@ export class ResponseCustomerSettingsDto {
   botType: BotType;
   status: BotStatus;
   prompts: PromptDto[];
+  /** Callback API VK: строка подтверждения вебхука. */
+  vkConfirmationCode?: string;
+  /** Задан секрет Callback API (для отображения в UI без раскрытия значения). */
+  hasVkCallbackSecret?: boolean;
   normalizedPrompt?: string;
   /** Версия текущего нормализованного промпта (для сопоставления с диалогами). */
   normalizedPromptVersion?: number;

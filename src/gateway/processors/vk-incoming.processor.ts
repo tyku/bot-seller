@@ -15,7 +15,7 @@ import { LlmRateLimitService } from '../../llm/llm-rate-limit.service';
 import { TariffUsageService } from '../../tariff-usage/tariff-usage.service';
 import { VK_INCOMING_QUEUE } from '../constants';
 import type { VkIncomingJob } from '../interfaces/vk-update.interface';
-import { sendVkMessage } from '../../common/vk-api';
+import { VkService } from '../../vk/vk.service';
 
 const LIMITS_MESSAGE = 'Лимиты закончились.';
 
@@ -31,6 +31,7 @@ export class VkIncomingProcessor extends WorkerHost {
     private readonly conversationReplyService: ConversationReplyService,
     private readonly llmRateLimit: LlmRateLimitService,
     private readonly tariffUsageService: TariffUsageService,
+    private readonly vkService: VkService,
   ) {
     super();
   }
@@ -54,7 +55,10 @@ export class VkIncomingProcessor extends WorkerHost {
     const userText = (message.text ?? '').trim();
     const customerIdNum = Number(customerId);
 
-    this.logger.log(`Processing VK update ${updateId} for bot ${botId} chat ${chatId}`);
+    const tsSec = message.date ?? Math.floor(Date.now() / 1000);
+    this.logger.log(
+      `Processing VK update ${updateId} for bot ${botId} (platform=vk userId=${message.from_id} ts=${tsSec})`,
+    );
 
     await this.userService.upsertByExternalId(SourceType.VK, fromId, {
       chatId,
@@ -90,14 +94,18 @@ export class VkIncomingProcessor extends WorkerHost {
       const requestResult =
         await this.tariffUsageService.tryConsumeRequest(customerIdNum);
       if (!requestResult.allowed) {
-        await sendVkMessage(settings.token, message.from_id, LIMITS_MESSAGE);
+        await this.vkService.sendMessage(
+          settings.token,
+          message.from_id,
+          LIMITS_MESSAGE,
+        );
         return;
       }
     }
 
     const rateLimit = await this.llmRateLimit.checkAndConsume(botId);
     if (!rateLimit.allowed) {
-      await sendVkMessage(
+      await this.vkService.sendMessage(
         settings.token,
         message.from_id,
         rateLimit.message ??
@@ -121,7 +129,11 @@ export class VkIncomingProcessor extends WorkerHost {
         botId,
         llmReply,
       );
-      await sendVkMessage(settings.token, message.from_id, llmReply);
+      await this.vkService.sendMessage(
+        settings.token,
+        message.from_id,
+        llmReply,
+      );
     }
 
     if (!Number.isNaN(customerIdNum)) {

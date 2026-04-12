@@ -31,6 +31,11 @@ import { NormalizedPromptModule } from '../normalized-prompt/normalized-prompt.m
     BotCacheService,
     TelegramWebhookService,
   ],
-  exports: [CustomerSettingsService, CustomerSettingsRepository, BotCacheService],
+  exports: [
+    CustomerSettingsService,
+    CustomerSettingsRepository,
+    BotCacheService,
+    WebhookSecretService,
+  ],
 })
 export class CustomerSettingsModule {}

@@ -8,7 +8,7 @@ async function bootstrap() {
   const configService = app.get(ConfigService);
   
   // Enable CORS
-  const isDev = configService.get<string>('nodeEnv') !== 'production';
+  const isDev = false; //configService.get<string>('nodeEnv') !== 'production';
   app.enableCors({
     origin: isDev ? true : ['http://localhost:3000', 'https://test-it.tech'], // TODO: replace with production domain
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',

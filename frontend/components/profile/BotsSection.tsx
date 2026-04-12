@@ -21,12 +21,24 @@ const promptSchema = z.object({
   type: z.literal('context'),
 });
 
-const botSchema = z.object({
-  name: z.string().min(2, 'Название должно содержать минимум 2 символа'),
-  token: z.string().min(1, 'Токен обязателен'),
-  botType: z.enum(['tg', 'vk']),
-  prompts: z.array(promptSchema).default([]),
-});
+const botSchema = z
+  .object({
+    name: z.string().min(2, 'Название должно содержать минимум 2 символа'),
+    token: z.string().min(1, 'Токен обязателен'),
+    botType: z.enum(['tg', 'vk']),
+    vkConfirmationCode: z.string().optional(),
+    vkCallbackSecret: z.string().optional(),
+    prompts: z.array(promptSchema).default([]),
+  })
+  .superRefine((data, ctx) => {
+    if (data.botType === 'vk' && !data.vkConfirmationCode?.trim()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Укажите строку подтверждения из настроек Callback API',
+        path: ['vkConfirmationCode'],
+      });
+    }
+  });
 
 type BotForm = z.infer<typeof botSchema>;
 
@@ -34,6 +46,8 @@ const defaultFormValues: BotForm = {
   name: '',
   token: '',
   botType: 'tg',
+  vkConfirmationCode: '',
+  vkCallbackSecret: '',
   prompts: [{ name: 'greeting', body: 'Привет! Я ваш помощник.', type: 'context' }],
 };
 
@@ -166,6 +180,8 @@ export function BotsSection() {
           name: bot.name,
           token: bot.token,
           botType: bot.botType as 'tg' | 'vk',
+          vkConfirmationCode: bot.vkConfirmationCode ?? '',
+          vkCallbackSecret: '',
           prompts: bot.prompts.map((p) => ({
             name: p.name,
             body: p.body,
@@ -186,13 +202,33 @@ export function BotsSection() {
     setError('');
 
     try {
+      const vkExtras =
+        data.botType === 'vk'
+          ? {
+              vkConfirmationCode: data.vkConfirmationCode?.trim(),
+              ...(data.vkCallbackSecret?.trim() && {
+                vkCallbackSecret: data.vkCallbackSecret.trim(),
+              }),
+            }
+          : {};
+
       if (formMode === 'edit' && editingBotId) {
-        const response = await settingsApi.update(editingBotId, data);
+        const response = await settingsApi.update(editingBotId, {
+          name: data.name,
+          token: data.token,
+          botType: data.botType,
+          prompts: data.prompts,
+          ...vkExtras,
+        });
         setBots((prev) => prev.map((b) => (b.id === editingBotId ? response.data : b)));
       } else {
         const response = await settingsApi.create({
           customerId: user.customerId.toString(),
-          ...data,
+          name: data.name,
+          token: data.token,
+          botType: data.botType,
+          prompts: data.prompts,
+          ...vkExtras,
         });
         setBots((prev) => [...prev, response.data]);
       }
@@ -337,6 +373,27 @@ export function BotsSection() {
               }
               {...register('token')}
             />
+
+            {botType === 'vk' && (
+              <>
+                <Input
+                  label="Строка подтверждения Callback API"
+                  placeholder="Скопируйте из настроек сообщества VK"
+                  error={errors.vkConfirmationCode?.message}
+                  sensitive
+                  helpText="Нужна для проверки вебхука. Укажите в VK URL: POST …/vk/webhook/ и id бота в конце пути."
+                  {...register('vkConfirmationCode')}
+                />
+                <Input
+                  label="Секрет Callback API (необязательно)"
+                  placeholder="Если задан в сообществе VK"
+                  error={errors.vkCallbackSecret?.message}
+                  sensitive
+                  helpText="Должен совпадать с секретом в настройках Callback API. Оставьте пустым, если секрет не используется."
+                  {...register('vkCallbackSecret')}
+                />
+              </>
+            )}
 
             <div className="space-y-4">
               <div className="flex items-center justify-between">

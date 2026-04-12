@@ -52,6 +52,14 @@ export class CustomerSettings {
   @Prop()
   webhookSecret?: string;
 
+  /** Строка подтверждения Callback API VK (проверка вебхука). */
+  @Prop()
+  vkConfirmationCode?: string;
+
+  /** Секрет Callback API VK (если задан в настройках сообщества); хранится зашифрованным. */
+  @Prop()
+  vkCallbackSecret?: string;
+
   @Prop({ type: [PromptSchema], default: [] })
   prompts: Prompt[];
 

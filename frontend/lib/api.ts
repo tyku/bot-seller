@@ -105,6 +105,8 @@ export const settingsApi = {
     name: string;
     token: string;
     botType: 'tg' | 'vk';
+    vkConfirmationCode?: string;
+    vkCallbackSecret?: string;
     prompts: Array<{ name: string; body: string; type: 'context' }>;
   }) => {
     const response = await api.post('/customer-settings', data);

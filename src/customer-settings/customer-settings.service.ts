@@ -67,9 +67,34 @@ export class CustomerSettingsService {
         createCustomerSettingsDto.prompts ?? [],
       );
 
+      const tokenResolved =
+        createCustomerSettingsDto.botType === BotType.VK
+          ? (
+              createCustomerSettingsDto.vkToken?.trim() ||
+              createCustomerSettingsDto.token?.trim() ||
+              ''
+            )
+          : createCustomerSettingsDto.token?.trim() || '';
+
+      let vkCallbackSecretEnc: string | undefined;
+      if (createCustomerSettingsDto.vkCallbackSecret?.trim()) {
+        vkCallbackSecretEnc = this.webhookSecretService.encrypt(
+          createCustomerSettingsDto.vkCallbackSecret.trim(),
+        );
+      }
+
       let customerSettings = await this.customerSettingsRepository.create({
-        ...createCustomerSettingsDto,
+        customerId: createCustomerSettingsDto.customerId,
+        name: createCustomerSettingsDto.name,
+        token: tokenResolved,
+        botType: createCustomerSettingsDto.botType,
+        prompts: createCustomerSettingsDto.prompts ?? [],
         webhookSecret,
+        vkConfirmationCode:
+          createCustomerSettingsDto.botType === BotType.VK
+            ? createCustomerSettingsDto.vkConfirmationCode?.trim()
+            : undefined,
+        vkCallbackSecret: vkCallbackSecretEnc,
       });
 
       if (normalizedBody != null) {
@@ -171,8 +196,20 @@ export class CustomerSettingsService {
       throw new NotFoundException('Customer settings not found');
     }
 
-    if (updateData.token && updateData.token !== current.token && current.status === BotStatus.ACTIVE) {
-      throw new BadRequestException('Deactivate bot before changing token');
+    if (updateData.token !== undefined || updateData.vkToken !== undefined) {
+      const proposed =
+        current.botType === BotType.VK
+          ? (updateData.vkToken?.trim() ??
+              updateData.token?.trim() ??
+              undefined)
+          : updateData.token?.trim();
+      if (
+        proposed !== undefined &&
+        proposed !== current.token &&
+        current.status === BotStatus.ACTIVE
+      ) {
+        throw new BadRequestException('Deactivate bot before changing token');
+      }
     }
 
     const isActivating =
@@ -205,9 +242,30 @@ export class CustomerSettingsService {
       await this.activateTelegramBot(id, current);
     }
 
+    const {
+      vkToken,
+      vkCallbackSecret: vkCallbackSecretPlain,
+      ...updateDataRest
+    } = updateData;
+
     let dataToUpdate: UpdateCustomerSettingsDto & {
       currentNormalizedPromptId?: Types.ObjectId;
-    } = { ...updateData };
+      token?: string;
+      vkConfirmationCode?: string;
+      vkCallbackSecret?: string;
+    } = { ...updateDataRest };
+
+    if (current.botType === BotType.VK && vkToken !== undefined) {
+      dataToUpdate.token = vkToken.trim();
+    }
+
+    if (vkCallbackSecretPlain !== undefined) {
+      const trimmed = vkCallbackSecretPlain.trim();
+      if (trimmed) {
+        dataToUpdate.vkCallbackSecret =
+          this.webhookSecretService.encrypt(trimmed);
+      }
+    }
     if (updateData.prompts !== undefined) {
       const normalizedBody = await this.computeNormalizedPrompt(
         updateData.prompts,
@@ -429,6 +487,10 @@ export class CustomerSettingsService {
         body: prompt.body,
         type: prompt.type,
       })),
+      ...(customerSettings.botType === BotType.VK && {
+        vkConfirmationCode: customerSettings.vkConfirmationCode,
+        hasVkCallbackSecret: Boolean(customerSettings.vkCallbackSecret),
+      }),
       normalizedPrompt,
       normalizedPromptVersion,
       createdAt: customerSettings.createdAt,

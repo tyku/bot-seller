@@ -7,7 +7,7 @@ import { ConversationsRepository } from './conversations.repository';
 import { CustomerSettingsRepository } from '../customer-settings/customer-settings.repository';
 import { BotType } from '../customer-settings/schemas/customer-settings.schema';
 import { sendTelegramHtmlMessage } from '../common/telegram-html-message';
-import { sendVkMessage } from '../common/vk-api';
+import { VkService } from '../vk/vk.service';
 import {
   ConversationPlatform,
   ConversationType,
@@ -30,6 +30,7 @@ export class ConversationsService {
     private readonly conversationsRepository: ConversationsRepository,
     private readonly customerSettingsRepository: CustomerSettingsRepository,
     private readonly operatorInboxQueue: OperatorInboxQueueService,
+    private readonly vkService: VkService,
   ) {}
 
   async getOrCreate(
@@ -411,7 +412,7 @@ export class ConversationsService {
       if (Number.isNaN(userIdNum)) {
         throw new BadRequestException('Некорректный chat_id для VK');
       }
-      await sendVkMessage(settings.token, userIdNum, trimmed);
+      await this.vkService.sendMessage(settings.token, userIdNum, trimmed);
     } else {
       throw new BadRequestException('Канал не поддерживает отправку из inbox');
     }
