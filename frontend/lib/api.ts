@@ -1,4 +1,5 @@
 import axios from 'axios';
+import type { SystemPromptAdminRow } from '@/lib/types';
 
 const api = axios.create({
   baseURL: '/api',
@@ -283,6 +284,30 @@ export const debugChatApi = {
     success: boolean;
   }> => {
     const response = await api.get('/conversations/debug/history', { params: { botId } });
+    return response.data;
+  },
+};
+
+// System prompts (LLM, collection systemprompts)
+export const systemPromptsApi = {
+  getAll: async (): Promise<{
+    success: boolean;
+    data: SystemPromptAdminRow[];
+    message: string;
+  }> => {
+    const response = await api.get('/system-prompts');
+    return response.data;
+  },
+
+  updateText: async (
+    id: string,
+    body: { text: string },
+  ): Promise<{
+    success: boolean;
+    data: SystemPromptAdminRow;
+    message: string;
+  }> => {
+    const response = await api.patch(`/system-prompts/${id}`, body);
     return response.data;
   },
 };

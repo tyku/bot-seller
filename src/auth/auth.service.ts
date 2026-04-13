@@ -8,7 +8,8 @@ import { VerifyCodeDto } from './dto/verify-code.dto';
 import { detectContactType } from './dto/enter.dto';
 import { JwtPayload } from './strategies/jwt.strategy';
 import { VerificationService } from '../verification/verification.service';
-import { CustomerStatus } from '../customer/schemas/customer.schema';
+import { CustomerDocument, CustomerStatus } from '../customer/schemas/customer.schema';
+import { ResponseCustomerDto } from '../customer/dto/response-customer.dto';
 import { VerificationType } from '../verification/schemas/verification.schema';
 import { TelegramService } from '../telegram/telegram.service';
 
@@ -265,7 +266,7 @@ export class AuthService {
 
       this.logger.log(`Verification successful for customer ${customer.customerId}`);
       // Generate and return JWT token
-      return this.generateToken(customer);
+      return await this.generateToken(customer);
     } catch (error) {
       this.logger.error(`Verification error: ${error.message}`, error.stack);
       throw error;
@@ -312,7 +313,7 @@ export class AuthService {
     }
   }
 
-  private generateToken(customer: any) {
+  private async generateToken(customer: CustomerDocument) {
     const payload: JwtPayload = {
       sub: customer._id.toString(),
       customerId: customer.customerId,
@@ -321,16 +322,14 @@ export class AuthService {
 
     const accessToken = this.jwtService.sign(payload);
 
+    const customerDto: ResponseCustomerDto =
+      this.customerService.mapToResponseDto(customer);
+
     return {
       accessToken,
       tokenType: 'Bearer',
       expiresIn: '24h',
-      customer: {
-        customerId: customer.customerId,
-        email: customer.email,
-        phone: customer.phone,
-        name: customer.name,
-      },
+      customer: customerDto,
     };
   }
 }

@@ -1,4 +1,4 @@
-import { CustomerStatus } from '../schemas/customer.schema';
+import { CustomerRole, CustomerStatus } from '../schemas/customer.schema';
 
 export class ResponseCustomerDto {
   id: string;
@@ -7,6 +7,7 @@ export class ResponseCustomerDto {
   email: string;
   phone: string;
   status: CustomerStatus;
+  role: CustomerRole;
   createdAt: Date;
   updatedAt: Date;
 
