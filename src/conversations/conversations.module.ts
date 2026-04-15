@@ -12,6 +12,7 @@ import { OperatorInboxQueueService } from './operator-inbox-queue.service';
 import { ConversationsController } from './conversations.controller';
 import { CustomerSettingsModule } from '../customer-settings/customer-settings.module';
 import { LlmModule } from '../llm/llm.module';
+import { VkModule } from '../vk/vk.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { LlmModule } from '../llm/llm.module';
     ]),
     CustomerSettingsModule,
     LlmModule,
+    VkModule,
   ],
   controllers: [ConversationsController],
   providers: [

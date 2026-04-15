@@ -18,6 +18,7 @@ import { CustomerTariffsModule } from './customer-tariffs/customer-tariffs.modul
 import { TariffUsageModule } from './tariff-usage/tariff-usage.module';
 import { SubscriptionApplicationModule } from './subscription-application/subscription-application.module';
 import { DemoModule } from './demo/demo.module';
+import { VkModule } from './vk/vk.module';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import configuration from './config/configuration';
 import { validate } from './config/env.validation';
@@ -62,6 +63,7 @@ import { validate } from './config/env.validation';
     TariffUsageModule,
     SubscriptionApplicationModule,
     DemoModule,
+    VkModule,
   ],
   controllers: [],
   providers: [

@@ -21,12 +21,24 @@ const promptSchema = z.object({
   type: z.literal('context'),
 });
 
-const botSchema = z.object({
-  name: z.string().min(2, 'Название должно содержать минимум 2 символа'),
-  token: z.string().min(1, 'Токен обязателен'),
-  botType: z.enum(['tg', 'vk']),
-  prompts: z.array(promptSchema).default([]),
-});
+const botSchema = z
+  .object({
+    name: z.string().min(2, 'Название должно содержать минимум 2 символа'),
+    token: z.string().min(1, 'Токен обязателен'),
+    botType: z.enum(['tg', 'vk']),
+    vkConfirmationCode: z.string().optional(),
+    vkCallbackSecret: z.string().optional(),
+    prompts: z.array(promptSchema).default([]),
+  })
+  .superRefine((data, ctx) => {
+    if (data.botType === 'vk' && !data.vkConfirmationCode?.trim()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Укажите строку подтверждения из настроек Callback API',
+        path: ['vkConfirmationCode'],
+      });
+    }
+  });
 
 type BotForm = z.infer<typeof botSchema>;
 
@@ -34,6 +46,8 @@ const defaultFormValues: BotForm = {
   name: '',
   token: '',
   botType: 'tg',
+  vkConfirmationCode: '',
+  vkCallbackSecret: '',
   prompts: [{ name: 'greeting', body: 'Привет! Я ваш помощник.', type: 'context' }],
 };
 
@@ -54,6 +68,8 @@ export function BotsSection() {
   const [error, setError] = useState('');
   const [actionError, setActionError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [vkWebhookBot, setVkWebhookBot] = useState<BotSettings | null>(null);
+  const [copied, setCopied] = useState(false);
 
   const botParam = searchParams.get(BOT_PARAM);
   const formMode: 'closed' | 'create' | 'edit' =
@@ -142,6 +158,7 @@ export function BotsSection() {
   );
 
   const closeForm = useCallback(() => {
+    setVkWebhookBot(null);
     setError('');
     reset(defaultFormValues);
     pushBotsUrl({ bot: '' });
@@ -166,6 +183,8 @@ export function BotsSection() {
           name: bot.name,
           token: bot.token,
           botType: bot.botType as 'tg' | 'vk',
+          vkConfirmationCode: bot.vkConfirmationCode ?? '',
+          vkCallbackSecret: '',
           prompts: bot.prompts.map((p) => ({
             name: p.name,
             body: p.body,
@@ -175,6 +194,20 @@ export function BotsSection() {
       }
     }
   }, [formMode, editingBotId, bots, isLoadingBots, reset, pushBotsUrl]);
+
+  const handleCopyWebhook = async () => {
+    if (!vkWebhookBot?.id) return;
+
+    const url = `https://test-it.tech/api/vk/webhook/${vkWebhookBot.id}`;
+
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      console.error('Copy failed');
+    }
+  };
 
   const onSubmit = async (data: BotForm) => {
     if (!user) {
@@ -186,17 +219,41 @@ export function BotsSection() {
     setError('');
 
     try {
+      const vkExtras =
+        data.botType === 'vk'
+          ? {
+              vkConfirmationCode: data.vkConfirmationCode?.trim(),
+              ...(data.vkCallbackSecret?.trim() && {
+                vkCallbackSecret: data.vkCallbackSecret.trim(),
+              }),
+            }
+          : {};
+
       if (formMode === 'edit' && editingBotId) {
-        const response = await settingsApi.update(editingBotId, data);
+        const response = await settingsApi.update(editingBotId, {
+          name: data.name,
+          token: data.token,
+          botType: data.botType,
+          prompts: data.prompts,
+          ...vkExtras,
+        });
         setBots((prev) => prev.map((b) => (b.id === editingBotId ? response.data : b)));
+        closeForm();
       } else {
         const response = await settingsApi.create({
           customerId: user.customerId.toString(),
-          ...data,
+          name: data.name,
+          token: data.token,
+          botType: data.botType,
+          prompts: data.prompts,
+          ...vkExtras,
         });
         setBots((prev) => [...prev, response.data]);
+        closeForm();
+        if (response.data?.botType === 'vk') {
+          setVkWebhookBot(response.data);
+        }
       }
-      closeForm();
     } catch (err) {
       setError(getErrorMessage(err, formMode === 'edit' ? 'Ошибка сохранения' : 'Ошибка создания бота'));
     } finally {
@@ -337,6 +394,27 @@ export function BotsSection() {
               }
               {...register('token')}
             />
+
+            {botType === 'vk' && (
+              <>
+                <Input
+                  label="Строка подтверждения Callback API"
+                  placeholder="Скопируйте код подтверждения из VK (раздел Callback API)"
+                  error={errors.vkConfirmationCode?.message}
+                  sensitive
+                  helpText="Скопируйте код подтверждения из VK и вставьте сюда"
+                  {...register('vkConfirmationCode')}
+                />
+                <Input
+                  label="Секрет Callback API (необязательно)"
+                  placeholder="Если вы указывали секретный ключ в VK — вставьте его сюда"
+                  error={errors.vkCallbackSecret?.message}
+                  sensitive
+                  helpText="Должен совпадать с тем, что указан в настройках VK. Если вы не задавали ключ, оставьте поле пустым"
+                  {...register('vkCallbackSecret')}
+                />
+              </>
+            )}
 
             <div className="space-y-4">
               <div className="flex items-center justify-between">
@@ -525,6 +603,37 @@ export function BotsSection() {
               </Card>
             );
           })}
+        </div>
+      )}
+
+      {vkWebhookBot && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <Card className="w-full max-w-md p-6">
+            <h3 className="text-lg font-semibold mb-4">
+              Подключение VK бота
+            </h3>
+
+            <p className="text-sm text-gray-600 mb-3">
+            Вставьте ссылку в поле «Адрес» в VK и нажмите «Подтвердить»
+            </p>
+
+            <div className="bg-gray-100 p-3 rounded text-sm break-all mb-4">
+              https://test-it.tech/api/vk/webhook/{vkWebhookBot.id}
+            </div>
+
+            <div className="flex gap-2">
+              <Button onClick={handleCopyWebhook}>
+                {copied ? 'Скопировано' : 'Скопировать'}
+              </Button>
+
+              <Button
+                variant="outline"
+                onClick={() => setVkWebhookBot(null)}
+              >
+                Закрыть
+              </Button>
+            </div>
+          </Card>
         </div>
       )}
     </div>

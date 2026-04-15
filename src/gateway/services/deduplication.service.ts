@@ -1,6 +1,10 @@
 import { Injectable, Inject, Logger, OnModuleDestroy } from '@nestjs/common';
 import Redis from 'ioredis';
-import { DEDUP_KEY_PREFIX, DEDUP_TTL_SECONDS } from '../constants';
+import {
+  DEDUP_KEY_PREFIX,
+  DEDUP_VK_KEY_PREFIX,
+  DEDUP_TTL_SECONDS,
+} from '../constants';
 
 @Injectable()
 export class DeduplicationService implements OnModuleDestroy {
@@ -29,6 +33,30 @@ export class DeduplicationService implements OnModuleDestroy {
         error.stack,
       );
       // Fail open: if Redis is down, let the message through
+      return false;
+    }
+  }
+
+  /**
+   * Дедупликация событий VK Callback API (строковый ключ события).
+   */
+  async isDuplicateVk(botId: string, eventKey: string): Promise<boolean> {
+    const key = `${DEDUP_VK_KEY_PREFIX}${botId}:${eventKey}`;
+
+    try {
+      const result = await this.redis.set(
+        key,
+        '1',
+        'EX',
+        DEDUP_TTL_SECONDS,
+        'NX',
+      );
+      return result === null;
+    } catch (error) {
+      this.logger.error(
+        `Redis VK dedup check failed for ${key}: ${error.message}`,
+        error.stack,
+      );
       return false;
     }
   }

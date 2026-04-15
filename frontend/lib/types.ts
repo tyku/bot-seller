@@ -39,6 +39,10 @@ export interface BotSettings {
   token: string;
   botType: 'tg' | 'vk';
   status: BotStatusType;
+  /** Callback API VK: строка подтверждения вебхука. */
+  vkConfirmationCode?: string;
+  /** Задан секрет Callback API (флаг с бэкенда). */
+  hasVkCallbackSecret?: boolean;
   prompts: Array<{
     name: string;
     body: string;
